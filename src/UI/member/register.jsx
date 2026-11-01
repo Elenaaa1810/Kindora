@@ -34,6 +34,8 @@ const Register = () => {
   });
 
   const [error, setError] = useState("");
+const [isSubmitting, setIsSubmitting] = useState(false);
+const [success, setSuccess] = useState("");
 
   // Input changes
   const handleChange = (e) => {
@@ -87,34 +89,104 @@ const Register = () => {
   };
 
   // Submit application
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (
-      !formData.reason.trim() ||
-      !formData.motivation ||
-      formData.interests.length === 0 ||
-      !formData.previousExperience ||
-      !formData.availability
-    ) {
-      setError("Please complete all required volunteer questions.");
-      return;
-    }
+  if (
+    !formData.reason.trim() ||
+    !formData.motivation ||
+    formData.interests.length === 0 ||
+    !formData.previousExperience ||
+    !formData.availability
+  ) {
+    setError("Please complete all required volunteer questions.");
+    return;
+  }
 
-    if (
-      formData.previousExperience === "yes" &&
-      !formData.experienceDetails.trim()
-    ) {
-      setError("Please describe your previous volunteering experience.");
-      return;
-    }
+  if (
+    formData.previousExperience === "yes" &&
+    !formData.experienceDetails.trim()
+  ) {
+    setError("Please describe your previous volunteering experience.");
+    return;
+  }
 
-    setError(
-      "Your application is valid! Connect your Laravel backend to submit it for admin approval."
+  setError("");
+  setSuccess("");
+  setIsSubmitting(true);
+
+  // Convert React form data into Laravel's expected format.
+  const registrationData = {
+    full_name: formData.fullName,
+    email: formData.email,
+    password: formData.password,
+    password_confirmation: formData.confirmPassword,
+
+    reason: formData.reason,
+    motivation: formData.motivation,
+    interests: formData.interests,
+
+    previous_experience: formData.previousExperience === "yes",
+    experience_details:
+      formData.previousExperience === "yes"
+        ? formData.experienceDetails
+        : null,
+
+    availability: formData.availability,
+  };
+
+  try {
+    const response = await fetch(
+      "http://127.0.0.1:8000/api/register",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(registrationData),
+      }
     );
 
-    console.log("Registration Data:", formData);
-  };
+    const data = await response.json();
+
+    if (!response.ok) {
+      if (data.errors) {
+        const validationMessages = Object.values(data.errors)
+          .flat()
+          .join(" ");
+
+        throw new Error(validationMessages);
+      }
+
+      throw new Error(data.message || "Registration failed.");
+    }
+
+    setSuccess(data.message);
+    setFormData({
+      fullName: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      reason: "",
+      motivation: "",
+      interests: [],
+      previousExperience: "",
+      experienceDetails: "",
+      availability: "",
+    });
+
+    setStep(1);
+  } catch (err) {
+    setError(
+      err.message || "Unable to connect to the Kindora server."
+    );
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
 
   // Reusable input styles
   const inputStyle =
@@ -576,10 +648,11 @@ const Register = () => {
 
                 <button
                   type="submit"
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-5 py-3.5 font-semibold text-white shadow-md shadow-blue-100 transition hover:bg-[#347BAE]"
+                  disabled={isSubmitting}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-5 py-3.5 font-semibold text-white shadow-md shadow-blue-100 transition hover:bg-[#347BAE] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Submit Application
-                  <ArrowRight size={19} />
+                  {isSubmitting ? "Submitting..." : "Submit Application"}
+                  {!isSubmitting && <ArrowRight size={19} />}
                 </button>
 
               </div>
@@ -592,14 +665,25 @@ const Register = () => {
           )}
 
           {/* Error Message */}
-          {error && (
-            <p
-              role="alert"
-              className="rounded-xl bg-[#FFF1F2] p-3 text-sm text-rose-600"
-            >
-              {error}
-            </p>
-          )}
+         {/* Success Message */}
+{success && (
+  <p
+    role="status"
+    className="rounded-xl bg-green-50 p-3 text-sm text-green-700"
+  >
+    {success} Your application is now waiting for admin approval.
+  </p>
+)}
+
+        {/* Error Message */}
+        {error && (
+          <p
+            role="alert"
+            className="rounded-xl bg-[#FFF1F2] p-3 text-sm text-rose-600"
+          >
+            {error}
+          </p>
+        )}
         </form>
 
         {/* Login Link */}

@@ -1,6 +1,5 @@
-
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   HeartHandshake,
   Mail,
@@ -12,13 +11,18 @@ import {
 } from "lucide-react";
 
 const Login = () => {
+  const navigate = useNavigate();
+
   const [showPassword, setShowPassword] = useState(false);
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     rememberMe: false,
   });
+
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -31,7 +35,7 @@ const Login = () => {
     setError("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!formData.email.trim() || !formData.password) {
@@ -39,13 +43,63 @@ const Login = () => {
       return;
     }
 
-    setError(
-      "The form is valid. Connect your backend to authenticate your account."
-    );
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            email: formData.email.trim(),
+            password: formData.password,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Login failed. Please try again."
+        );
+      }
+
+      // Save authentication token
+      const storage = formData.rememberMe
+        ? localStorage
+        : sessionStorage;
+
+      const otherStorage = formData.rememberMe
+        ? sessionStorage
+        : localStorage;
+
+      otherStorage.removeItem("memberToken");
+      otherStorage.removeItem("member");
+
+      storage.setItem("memberToken", data.token);
+      storage.setItem("member", JSON.stringify(data.member));
+
+      // Redirect after successful login
+      navigate("/userprofile");
+
+    } catch (err) {
+      setError(
+        err.message || "Unable to connect to the server."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EAF5FC] via-white to-[#F0FAFC] px-5 py-10">
+
       {/* Logo */}
       <div className="mx-auto max-w-6xl">
         <Link to="/" className="inline-flex items-center gap-2">
@@ -61,6 +115,7 @@ const Login = () => {
 
       {/* Login Card */}
       <div className="mx-auto mt-10 max-w-md rounded-3xl border border-[#DDF0FC] bg-white p-7 shadow-xl shadow-blue-100/60 sm:mt-16 sm:p-10">
+
         {/* Heading */}
         <div className="text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#DDF0FC] text-[#438FC4]">
@@ -78,6 +133,7 @@ const Login = () => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+
           {/* Email */}
           <div>
             <label
@@ -149,7 +205,11 @@ const Login = () => {
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#438FC4]"
               >
-                {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                {showPassword ? (
+                  <EyeOff size={19} />
+                ) : (
+                  <Eye size={19} />
+                )}
               </button>
             </div>
           </div>
@@ -186,10 +246,11 @@ const Login = () => {
           {/* Login Button */}
           <button
             type="submit"
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-5 py-3.5 font-semibold text-white shadow-md shadow-blue-100 transition hover:bg-[#347BAE]"
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-5 py-3.5 font-semibold text-white shadow-md shadow-blue-100 transition hover:bg-[#347BAE] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Login to Account
-            <ArrowRight size={19} />
+            {loading ? "Signing in..." : "Login to Account"}
+            {!loading && <ArrowRight size={19} />}
           </button>
         </form>
 
