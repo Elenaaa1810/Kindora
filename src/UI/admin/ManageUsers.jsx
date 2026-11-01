@@ -5,14 +5,12 @@ import {
   Users,
   UserCheck,
   UserX,
-  ShieldCheck,
   Mail,
   MapPin,
   CalendarDays,
   MoreVertical,
   X,
   Eye,
-  CheckCircle,
   Ban,
   RotateCcw,
 } from "lucide-react";
@@ -63,17 +61,6 @@ const initialUsers = [
     hours: 42,
   },
   {
-    id: 5,
-    name: "Kyaw Kyaw",
-    email: "kyaw@example.com",
-    location: "Bago",
-    joined: "2026-10-01",
-    role: "Member",
-    status: "Pending",
-    campaigns: 0,
-    hours: 0,
-  },
-  {
     id: 6,
     name: "May Thu",
     email: "may@example.com",
@@ -89,7 +76,6 @@ const initialUsers = [
 const statusStyles = {
   Active: "bg-green-100 text-green-700",
   Suspended: "bg-red-100 text-red-700",
-  Pending: "bg-amber-100 text-amber-700",
 };
 
 const avatarColors = [
@@ -108,6 +94,7 @@ export default function ManageUsers() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
 
+  // Search and filter users
   const filteredUsers = users.filter((user) => {
     const searchTerm = search.toLowerCase();
 
@@ -119,11 +106,13 @@ export default function ManageUsers() {
     const matchesStatus =
       statusFilter === "All" || user.status === statusFilter;
 
-    const matchesRole = roleFilter === "All" || user.role === roleFilter;
+    const matchesRole =
+      roleFilter === "All" || user.role === roleFilter;
 
     return matchesSearch && matchesStatus && matchesRole;
   });
 
+  // Statistics
   const activeCount = users.filter(
     (user) => user.status === "Active"
   ).length;
@@ -132,10 +121,7 @@ export default function ManageUsers() {
     (user) => user.status === "Suspended"
   ).length;
 
-  const pendingCount = users.filter(
-    (user) => user.status === "Pending"
-  ).length;
-
+  // Update member status
   const updateStatus = (id, status) => {
     setUsers((current) =>
       current.map((user) =>
@@ -150,6 +136,7 @@ export default function ManageUsers() {
     setOpenMenu(null);
   };
 
+  // Statistics cards
   const stats = [
     {
       label: "Total Members",
@@ -169,16 +156,11 @@ export default function ManageUsers() {
       icon: UserX,
       color: "bg-red-100 text-red-600",
     },
-    {
-      label: "Pending Approval",
-      value: pendingCount,
-      icon: ShieldCheck,
-      color: "bg-amber-100 text-amber-600",
-    },
   ];
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
+
       {/* Header */}
       <div className="mb-8">
         <p className="mb-1 text-sm font-medium text-blue-600">
@@ -195,7 +177,7 @@ export default function ManageUsers() {
       </div>
 
       {/* Statistics */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {stats.map((stat) => {
           const Icon = stat.icon;
 
@@ -206,7 +188,10 @@ export default function ManageUsers() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-500">{stat.label}</p>
+                  <p className="text-sm text-slate-500">
+                    {stat.label}
+                  </p>
+
                   <h2 className="mt-2 text-3xl font-bold text-slate-800">
                     {stat.value}
                   </h2>
@@ -223,11 +208,14 @@ export default function ManageUsers() {
 
       {/* Users Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+
         <div className="border-b border-slate-100 p-5">
+
           <div className="mb-5">
             <h2 className="text-lg font-bold text-slate-800">
               Registered Members
             </h2>
+
             <p className="mt-1 text-sm text-slate-500">
               {filteredUsers.length} member(s) found
             </p>
@@ -235,6 +223,7 @@ export default function ManageUsers() {
 
           {/* Search and filters */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+
             <div className="relative">
               <Search
                 size={18}
@@ -258,7 +247,6 @@ export default function ManageUsers() {
               <option value="All">All Statuses</option>
               <option value="Active">Active</option>
               <option value="Suspended">Suspended</option>
-              <option value="Pending">Pending</option>
             </select>
 
             <select
@@ -270,24 +258,31 @@ export default function ManageUsers() {
               <option value="Member">Member</option>
               <option value="Admin">Admin</option>
             </select>
+
           </div>
         </div>
 
         {filteredUsers.length === 0 ? (
           <div className="px-6 py-16 text-center">
-            <Users size={36} className="mx-auto mb-3 text-slate-300" />
+            <Users
+              size={36}
+              className="mx-auto mb-3 text-slate-300"
+            />
+
             <h3 className="font-semibold text-slate-800">
               No members found
             </h3>
+
             <p className="mt-2 text-sm text-slate-500">
               Try changing your search or filters.
             </p>
           </div>
         ) : (
           <>
-            {/* Desktop table */}
+            {/* Desktop Table */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left">
+
                 <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-6 py-4 font-semibold">Member</th>
@@ -307,6 +302,7 @@ export default function ManageUsers() {
                       key={user.id}
                       className="transition hover:bg-slate-50"
                     >
+                      {/* Member */}
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
                           <div
@@ -325,9 +321,11 @@ export default function ManageUsers() {
                             <p className="font-semibold text-slate-800">
                               {user.name}
                             </p>
+
                             <p className="mt-1 text-sm text-slate-500">
                               {user.email}
                             </p>
+
                             <p className="mt-1 text-xs text-slate-400">
                               {user.role}
                             </p>
@@ -335,6 +333,7 @@ export default function ManageUsers() {
                         </div>
                       </td>
 
+                      {/* Location */}
                       <td className="px-6 py-5">
                         <p className="flex items-center gap-2 text-sm text-slate-600">
                           <MapPin size={15} className="text-slate-400" />
@@ -342,6 +341,7 @@ export default function ManageUsers() {
                         </p>
                       </td>
 
+                      {/* Joined */}
                       <td className="px-6 py-5">
                         <p className="flex items-center gap-2 text-sm text-slate-600">
                           <CalendarDays
@@ -352,15 +352,18 @@ export default function ManageUsers() {
                         </p>
                       </td>
 
+                      {/* Activity */}
                       <td className="px-6 py-5">
                         <p className="text-sm font-semibold text-slate-700">
                           {user.campaigns} campaigns
                         </p>
+
                         <p className="mt-1 text-xs text-slate-500">
                           {user.hours} volunteering hours
                         </p>
                       </td>
 
+                      {/* Status */}
                       <td className="px-6 py-5">
                         <span
                           className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyles[user.status]}`}
@@ -369,9 +372,11 @@ export default function ManageUsers() {
                         </span>
                       </td>
 
+                      {/* Actions */}
                       <td className="px-6 py-5">
                         <div className="flex justify-end">
                           <div className="relative">
+
                             <button
                               onClick={() =>
                                 setOpenMenu(
@@ -387,6 +392,7 @@ export default function ManageUsers() {
 
                             {openMenu === user.id && (
                               <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-slate-100 bg-white p-2 shadow-lg">
+
                                 <button
                                   onClick={() => {
                                     setSelectedUser(user);
@@ -397,18 +403,6 @@ export default function ManageUsers() {
                                   <Eye size={16} />
                                   View Details
                                 </button>
-
-                                {user.status !== "Active" && (
-                                  <button
-                                    onClick={() =>
-                                      updateStatus(user.id, "Active")
-                                    }
-                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-green-700 hover:bg-green-50"
-                                  >
-                                    <CheckCircle size={16} />
-                                    Activate Account
-                                  </button>
-                                )}
 
                                 {user.status === "Active" && (
                                   <button
@@ -433,6 +427,7 @@ export default function ManageUsers() {
                                     Restore Account
                                   </button>
                                 )}
+
                               </div>
                             )}
                           </div>
@@ -444,7 +439,7 @@ export default function ManageUsers() {
               </table>
             </div>
 
-            {/* Mobile cards */}
+            {/* Mobile Cards */}
             <div className="grid gap-4 p-4 md:hidden">
               {filteredUsers.map((user, index) => (
                 <div
@@ -469,6 +464,7 @@ export default function ManageUsers() {
                         <h3 className="font-semibold text-slate-800">
                           {user.name}
                         </h3>
+
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyles[user.status]}`}
                         >
@@ -487,16 +483,19 @@ export default function ManageUsers() {
                       <MapPin size={15} />
                       {user.location}
                     </p>
+
                     <p className="flex items-center gap-2">
                       <CalendarDays size={15} />
                       Joined {user.joined}
                     </p>
+
                     <p>
                       {user.campaigns} campaigns · {user.hours} volunteer hours
                     </p>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+
                     <button
                       onClick={() => setSelectedUser(user)}
                       className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
@@ -504,21 +503,26 @@ export default function ManageUsers() {
                       View Details
                     </button>
 
-                    {user.status !== "Active" ? (
+                    {user.status === "Active" ? (
                       <button
-                        onClick={() => updateStatus(user.id, "Active")}
-                        className="rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
-                      >
-                        Activate
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => updateStatus(user.id, "Suspended")}
+                        onClick={() =>
+                          updateStatus(user.id, "Suspended")
+                        }
                         className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
                       >
                         Suspend
                       </button>
+                    ) : (
+                      <button
+                        onClick={() =>
+                          updateStatus(user.id, "Active")
+                        }
+                        className="rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
+                      >
+                        Restore
+                      </button>
                     )}
+
                   </div>
                 </div>
               ))}
@@ -531,12 +535,14 @@ export default function ManageUsers() {
         Demo data only. Changes are not saved to a database.
       </p>
 
-      {/* Member details modal */}
+      {/* Member Details Modal */}
       {selectedUser && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setSelectedUser(null);
+            if (e.target === e.currentTarget) {
+              setSelectedUser(null);
+            }
           }}
         >
           <div
@@ -545,6 +551,7 @@ export default function ManageUsers() {
             aria-labelledby="user-details-title"
             className="my-auto w-full max-w-lg rounded-2xl bg-white shadow-xl"
           >
+            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h2
                 id="user-details-title"
@@ -562,7 +569,9 @@ export default function ManageUsers() {
               </button>
             </div>
 
+            {/* Modal Content */}
             <div className="p-6">
+
               <div className="mb-6 flex flex-col items-center text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-xl font-bold text-blue-700">
                   {selectedUser.name
@@ -584,6 +593,7 @@ export default function ManageUsers() {
               </div>
 
               <div className="space-y-4">
+
                 <div className="flex items-start gap-3">
                   <Mail size={18} className="mt-0.5 text-slate-400" />
                   <div>
@@ -632,19 +642,13 @@ export default function ManageUsers() {
                     </p>
                   </div>
                 </div>
+
               </div>
 
+              {/* Modal Actions */}
               <div className="mt-6 flex flex-wrap gap-3">
-                {selectedUser.status !== "Active" ? (
-                  <button
-                    onClick={() =>
-                      updateStatus(selectedUser.id, "Active")
-                    }
-                    className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700"
-                  >
-                    Activate Account
-                  </button>
-                ) : (
+
+                {selectedUser.status === "Active" ? (
                   <button
                     onClick={() =>
                       updateStatus(selectedUser.id, "Suspended")
@@ -652,6 +656,15 @@ export default function ManageUsers() {
                     className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
                   >
                     Suspend Account
+                  </button>
+                ) : (
+                  <button
+                    onClick={() =>
+                      updateStatus(selectedUser.id, "Active")
+                    }
+                    className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700"
+                  >
+                    Restore Account
                   </button>
                 )}
 
@@ -661,11 +674,13 @@ export default function ManageUsers() {
                 >
                   Close
                 </button>
+
               </div>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

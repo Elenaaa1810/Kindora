@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   Users,
+  UserCheck,
   Settings,
   LogOut,
   Menu,
@@ -37,6 +38,11 @@ const navigation = [
     name: "Manage Users",
     path: "/admin/users",
     icon: Users,
+  },
+   {
+    name: "Member Approvals",
+    path: "/admin/approvals",
+    icon: UserCheck,
   },
 ];
 

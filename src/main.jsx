@@ -1,8 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import TestBackend from "./TestBackend.jsx";
 import Home from "./UI/member/homepage.jsx";
+import AdminApprovals from "./UI/admin/AdminApprovals.jsx";
 import Campaigns from "./UI/member/campaigns.jsx";
 import Community from "./UI/member/community.jsx";
 import AboutUs from "./UI/member/aboutus.jsx";
@@ -14,6 +14,7 @@ import AdminDashboard from "./UI/admin/AdminDashboard.jsx";
 import CampaignManagement from "./UI/admin/CampaignManagement.jsx";
 import AttendanceManagement from "./UI/admin/AttendanceManagement.jsx";
 import ManageUsers from "./UI/admin/ManageUsers.jsx";
+
 
 import "./index.css";
 
@@ -39,6 +40,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="campaigns" element={<CampaignManagement />} />
           <Route path="attendance" element={<AttendanceManagement />} />
           <Route path="users" element={<ManageUsers />} />
+          <Route path="approvals" element={<AdminApprovals />} />
+          
         </Route>
       </Routes>
       
