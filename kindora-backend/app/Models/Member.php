@@ -36,4 +36,8 @@ class Member extends Authenticatable
             'previous_experience' => 'boolean',
         ];
     }
+    public function campaignRegistrations()
+{
+    return $this->hasMany(CampaignRegistration::class);
+}
 }

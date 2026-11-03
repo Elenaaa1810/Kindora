@@ -1,6 +1,6 @@
+import { Link } from "react-router-dom";
 import Header from "./header";
-import { useState } from "react";
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from "react";
 import {
   HeartHandshake,
   Search,
@@ -16,98 +16,18 @@ import {
   Filter,
 } from "lucide-react";
 
-const campaigns = [
-  {
-    id: 1,
-    title: "Community Tree Planting",
-    category: "Environment",
-    date: "October 18, 2026",
-    time: "8:00 AM - 12:00 PM",
-    location: "Yangon, Myanmar",
-    volunteers: 24,
-    capacity: 40,
-    description:
-      "Help make our community greener by planting trees and learning about environmental protection.",
-    image:
-      "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=900&q=80",
-    color: "bg-green-100 text-green-700",
-  },
-  {
-    id: 2,
-    title: "Orphanage Donation Drive",
-    category: "Charity",
-    date: "October 22, 2026",
-    time: "9:00 AM - 1:00 PM",
-    location: "Mandalay, Myanmar",
-    volunteers: 18,
-    capacity: 30,
-    description:
-      "Support children by helping organize donations of school supplies, clothes, and daily necessities.",
-    image:
-      "https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?auto=format&fit=crop&w=900&q=80",
-    color: "bg-pink-100 text-pink-700",
-  },
-  {
-    id: 3,
-    title: "Neighborhood Cleanup",
-    category: "Community",
-    date: "October 25, 2026",
-    time: "7:00 AM - 10:00 AM",
-    location: "Yangon, Myanmar",
-    volunteers: 32,
-    capacity: 50,
-    description:
-      "Work with local volunteers to clean public spaces and encourage a cleaner neighborhood.",
-    image:
-      "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=900&q=80",
-    color: "bg-sky-100 text-sky-700",
-  },
-  {
-    id: 4,
-    title: "Reading for Children",
-    category: "Education",
-    date: "October 28, 2026",
-    time: "10:00 AM - 12:00 PM",
-    location: "Mandalay, Myanmar",
-    volunteers: 12,
-    capacity: 25,
-    description:
-      "Spend time reading stories with children and help them develop their reading skills.",
-    image:
-      "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=900&q=80",
-    color: "bg-purple-100 text-purple-700",
-  },
-  {
-    id: 5,
-    title: "Community Food Distribution",
-    category: "Charity",
-    date: "November 2, 2026",
-    time: "8:00 AM - 12:00 PM",
-    location: "Yangon, Myanmar",
-    volunteers: 20,
-    capacity: 35,
-    description:
-      "Help prepare and distribute food packages to community members who need assistance.",
-    image:
-      "https://images.unsplash.com/photo-1593113598332-cd288d649433?auto=format&fit=crop&w=900&q=80",
-    color: "bg-orange-100 text-orange-700",
-  },
-  {
-    id: 6,
-    title: "School Supply Collection",
-    category: "Education",
-    date: "November 5, 2026",
-    time: "9:00 AM - 12:00 PM",
-    location: "Naypyidaw, Myanmar",
-    volunteers: 15,
-    capacity: 30,
-    description:
-      "Collect and organize learning materials to help students access the supplies they need.",
-    image:
-      "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=900&q=80",
-    color: "bg-purple-100 text-purple-700",
-  },
-];
+const API_URL = "http://127.0.0.1:8000/api/campaigns";
+
+const fallbackImages = {
+  Environment:
+    "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=900&q=80",
+  Donation:
+    "https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?auto=format&fit=crop&w=900&q=80",
+  Education:
+    "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=900&q=80",
+  Community:
+    "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=900&q=80",
+};
 
 const categories = [
   { name: "All", icon: Sparkles },
@@ -117,11 +37,104 @@ const categories = [
   { name: "Community", icon: Users },
 ];
 
+const categoryColors = {
+  Environment: "bg-green-100 text-green-700",
+  Donation: "bg-pink-100 text-pink-700",
+  Charity: "bg-pink-100 text-pink-700",
+  Education: "bg-purple-100 text-purple-700",
+  Community: "bg-sky-100 text-sky-700",
+};
+
+function formatDate(date) {
+  if (!date) return "";
+
+  const parsedDate = new Date(`${date}T00:00:00`);
+
+  if (Number.isNaN(parsedDate.getTime())) return date;
+
+  return parsedDate.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatTime(time) {
+  if (!time) return "";
+
+  const [hours, minutes] = time.split(":");
+  const parsedHours = Number(hours);
+
+  if (Number.isNaN(parsedHours)) return time;
+
+  const period = parsedHours >= 12 ? "PM" : "AM";
+  const displayHours = parsedHours % 12 || 12;
+
+  return `${displayHours}:${minutes || "00"} ${period}`;
+}
+
 export default function Campaigns() {
+  const [campaigns, setCampaigns] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [search, setSearch] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("All locations");
   const [joinedCampaigns, setJoinedCampaigns] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Fetch campaigns from Laravel
+  useEffect(() => {
+    async function fetchCampaigns() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await fetch(API_URL);
+
+        if (!response.ok) {
+          throw new Error("Unable to load campaigns.");
+        }
+
+        const data = await response.json();
+
+        // Only display upcoming campaigns
+        const upcomingCampaigns = data
+          .filter(
+            (campaign) =>
+              campaign.status?.toLowerCase() === "upcoming"
+          )
+          .map((campaign) => ({
+            ...campaign,
+            // Convert database category to the category used by the UI
+            category:
+              campaign.category === "Donation"
+                ? "Charity"
+                : campaign.category,
+
+            // The backend does not currently store volunteer counts
+            volunteers: Number(campaign.volunteers ?? 0),
+
+            // Use uploaded campaign photo or a default image
+            image:
+              campaign.image_url ||
+              fallbackImages[campaign.category] ||
+              fallbackImages.Community,
+          }));
+
+        setCampaigns(upcomingCampaigns);
+      } catch (err) {
+        console.error("Campaign loading error:", err);
+        setError(
+          "Unable to connect to the campaign server. Please try again."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCampaigns();
+  }, []);
 
   const filteredCampaigns = campaigns.filter((campaign) => {
     const matchesCategory =
@@ -159,8 +172,8 @@ export default function Campaigns() {
   }
 
   return (
-     <>
-    <Header />
+    <>
+      <Header />
 
       <main>
         {/* Hero */}
@@ -236,7 +249,9 @@ export default function Campaigns() {
         >
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
-              <p className="font-bold text-[#69ACD9]">EXPLORE OPPORTUNITIES</p>
+              <p className="font-bold text-[#69ACD9]">
+                EXPLORE OPPORTUNITIES
+              </p>
               <h2 className="mt-2 text-3xl font-extrabold sm:text-4xl">
                 Upcoming Campaigns
               </h2>
@@ -246,7 +261,7 @@ export default function Campaigns() {
             </div>
 
             <p className="text-sm font-medium text-slate-500">
-              {filteredCampaigns.length} campaigns found
+              {loading ? "Loading campaigns..." : `${filteredCampaigns.length} campaigns found`}
             </p>
           </div>
 
@@ -273,8 +288,31 @@ export default function Campaigns() {
             })}
           </div>
 
-          {/* Cards */}
-          {filteredCampaigns.length > 0 ? (
+          {/* Loading state */}
+          {loading && (
+            <div className="mt-12 py-16 text-center">
+              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#DDF0FC] border-t-[#438FC4]" />
+              <p className="mt-4 text-slate-500">
+                Loading campaigns...
+              </p>
+            </div>
+          )}
+
+          {/* Error state */}
+          {!loading && error && (
+            <div className="mt-8 rounded-2xl border border-red-100 bg-red-50 px-6 py-12 text-center">
+              <p className="font-semibold text-red-600">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-5 rounded-xl bg-[#24364B] px-5 py-3 font-semibold text-white hover:bg-[#344F6B]"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {/* Campaign cards */}
+          {!loading && !error && filteredCampaigns.length > 0 && (
             <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredCampaigns.map((campaign) => {
                 const isJoined = joinedCampaigns.includes(campaign.id);
@@ -291,16 +329,25 @@ export default function Campaigns() {
                         alt={campaign.title}
                         className="h-52 w-full object-cover transition duration-500 group-hover:scale-105"
                         loading="lazy"
+                        onError={(event) => {
+                          event.currentTarget.src = fallbackImages.Community;
+                        }}
                       />
+
                       <span
-                        className={`absolute left-4 top-4 rounded-full px-3 py-1.5 text-xs font-bold ${campaign.color}`}
+                        className={`absolute left-4 top-4 rounded-full px-3 py-1.5 text-xs font-bold ${
+                          categoryColors[campaign.category] ||
+                          "bg-slate-100 text-slate-700"
+                        }`}
                       >
                         {campaign.category}
                       </span>
                     </div>
 
                     <div className="flex flex-1 flex-col p-5 sm:p-6">
-                      <h3 className="text-xl font-bold">{campaign.title}</h3>
+                      <h3 className="text-xl font-bold">
+                        {campaign.title}
+                      </h3>
 
                       <p className="mt-3 text-sm leading-6 text-slate-500">
                         {campaign.description}
@@ -312,7 +359,7 @@ export default function Campaigns() {
                             size={18}
                             className="mt-0.5 shrink-0 text-[#69ACD9]"
                           />
-                          {campaign.date}
+                          {formatDate(campaign.date)}
                         </p>
 
                         <p className="flex items-start gap-2">
@@ -320,7 +367,7 @@ export default function Campaigns() {
                             size={18}
                             className="mt-0.5 shrink-0 text-[#69ACD9]"
                           />
-                          {campaign.time}
+                          {formatTime(campaign.time)}
                         </p>
 
                         <p className="flex items-start gap-2">
@@ -332,7 +379,10 @@ export default function Campaigns() {
                         </p>
 
                         <p className="flex items-center gap-2">
-                          <Users size={18} className="shrink-0 text-[#69ACD9]" />
+                          <Users
+                            size={18}
+                            className="shrink-0 text-[#69ACD9]"
+                          />
                           {campaign.volunteers} / {campaign.capacity} volunteers
                         </p>
                       </div>
@@ -341,10 +391,16 @@ export default function Campaigns() {
                         <div
                           className="h-full rounded-full bg-[#8EC5E9]"
                           style={{
-                            width: `${Math.min(
-                              (campaign.volunteers / campaign.capacity) * 100,
-                              100
-                            )}%`,
+                            width: `${
+                              campaign.capacity > 0
+                                ? Math.min(
+                                    (campaign.volunteers /
+                                      campaign.capacity) *
+                                      100,
+                                    100
+                                  )
+                                : 0
+                            }%`,
                           }}
                         />
                       </div>
@@ -372,10 +428,15 @@ export default function Campaigns() {
                 );
               })}
             </div>
-          ) : (
+          )}
+
+          {/* Empty state */}
+          {!loading && !error && filteredCampaigns.length === 0 && (
             <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
               <Search size={36} className="mx-auto text-slate-300" />
-              <h3 className="mt-4 text-xl font-bold">No campaigns found</h3>
+              <h3 className="mt-4 text-xl font-bold">
+                No campaigns found
+              </h3>
               <p className="mt-2 text-slate-500">
                 Try another keyword, category, or location.
               </p>
@@ -410,12 +471,17 @@ export default function Campaigns() {
               </p>
             </div>
 
-            <a
-              href="/#signup"
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#24364B] px-6 py-4 font-bold text-white transition hover:bg-[#344F6B]"
-            >
-              Become a Volunteer <ArrowRight size={19} />
-            </a>
+            <Link
+  to={
+    localStorage.getItem("memberToken") ||
+    sessionStorage.getItem("memberToken")
+      ? "/userprofile"
+      : "/register"
+  }
+  className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#24364B] px-6 py-4 font-bold text-white transition hover:bg-[#344F6B]"
+>
+  Become a Volunteer <ArrowRight size={19} />
+</Link>
           </div>
         </section>
       </main>

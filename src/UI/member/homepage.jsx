@@ -301,13 +301,17 @@ function App() {
                 positive impact you make along the way.
               </p>
             </div>
-            <a
-              id="signup"
-              href="#login"
-              className="relative inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#24364B] px-6 py-4 font-bold text-white transition hover:bg-[#344F6B]"
-            >
-              Become a Volunteer <ArrowRight size={19} />
-            </a>
+            <Link
+  to={
+    localStorage.getItem("memberToken") ||
+    sessionStorage.getItem("memberToken")
+      ? "/userprofile"
+      : "/register"
+  }
+  className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#24364B] px-6 py-4 font-bold text-white transition hover:bg-[#344F6B]"
+>
+  Become a Volunteer <ArrowRight size={19} />
+</Link>
           </div>
         </section>
       </main>

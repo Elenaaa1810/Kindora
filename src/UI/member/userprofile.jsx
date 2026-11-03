@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import Header from "./header";
 import { useState } from "react";
 import {
@@ -72,6 +73,19 @@ function UserProfile() {
       color: "bg-blue-100 text-blue-700",
     };
   };
+  const navigate = useNavigate();
+
+const handleLogout = () => {
+  // Remove saved login information
+  localStorage.removeItem("memberToken");
+  localStorage.removeItem("member");
+
+  sessionStorage.removeItem("memberToken");
+  sessionStorage.removeItem("member");
+
+  // Return to homepage
+  navigate("/", { replace: true });
+};
 
   const achievement = getBadge(completedCampaigns);
 
@@ -413,22 +427,23 @@ function UserProfile() {
             <h2 className="text-xl font-extrabold">Account Settings</h2>
           </div>
 
-          <div className="mt-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-            <div>
-              <p className="font-semibold">Account Management</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Manage your account and sign out when needed.
-              </p>
-            </div>
+          <div className="mt-6 flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+  <div>
+    <p className="font-semibold">Account Management</p>
+    <p className="mt-1 text-sm text-slate-500">
+      Manage your account and sign out when needed.
+    </p>
+  </div>
 
-            <button
-              onClick={() => alert("Connect this button to your logout function.")}
-              className="flex items-center justify-center gap-2 rounded-xl border border-red-200 px-5 py-3 font-bold text-red-600 transition hover:bg-red-50"
-            >
-              <LogOut size={18} />
-              Log Out
-            </button>
-          </div>
+  <button
+    type="button"
+    onClick={handleLogout}
+    className="flex w-fit shrink-0 items-center gap-2 rounded-xl border border-red-200 px-4 py-3 font-semibold text-red-600 transition hover:bg-red-50"
+  >
+    <LogOut size={20} />
+    Logout
+  </button>
+</div>
         </section>
 
       </main>
