@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   Users,
@@ -12,62 +12,7 @@ import {
   Download,
 } from "lucide-react";
 
-const initialAttendance = [
-  {
-    id: 1,
-    name: "Aung Aung",
-    email: "aung@example.com",
-    campaign: "Community Cleaning Day",
-    date: "2026-10-20",
-    location: "Mandalay City",
-    status: "Present",
-  },
-  {
-    id: 2,
-    name: "Su Su",
-    email: "susu@example.com",
-    campaign: "Community Cleaning Day",
-    date: "2026-10-20",
-    location: "Mandalay City",
-    status: "Pending",
-  },
-  {
-    id: 3,
-    name: "Mg Mg",
-    email: "mgmg@example.com",
-    campaign: "Tree Planting Campaign",
-    date: "2026-10-22",
-    location: "Mandalay Park",
-    status: "Absent",
-  },
-  {
-    id: 4,
-    name: "Hnin Hnin",
-    email: "hnin@example.com",
-    campaign: "Donation for Children",
-    date: "2026-10-25",
-    location: "Mandalay",
-    status: "Present",
-  },
-  {
-    id: 5,
-    name: "Kyaw Kyaw",
-    email: "kyaw@example.com",
-    campaign: "Donation for Children",
-    date: "2026-10-25",
-    location: "Mandalay",
-    status: "Pending",
-  },
-  {
-    id: 6,
-    name: "May Thu",
-    email: "may@example.com",
-    campaign: "Tree Planting Campaign",
-    date: "2026-10-22",
-    location: "Mandalay Park",
-    status: "Present",
-  },
-];
+const API_URL = "http://127.0.0.1:8000/api";
 
 const statusStyles = {
   Present: "bg-green-100 text-green-700",
@@ -76,14 +21,131 @@ const statusStyles = {
 };
 
 export default function AttendanceManagement() {
-  const [attendance, setAttendance] = useState(initialAttendance);
+  const [campaigns, setCampaigns] = useState([]);
+  const [selectedCampaign, setSelectedCampaign] = useState("");
+  const [campaignType, setCampaignType] = useState("completed");
+
+  const [attendance, setAttendance] = useState([]);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [campaignFilter, setCampaignFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("");
 
-  const campaigns = [...new Set(attendance.map((item) => item.campaign))];
+  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [error, setError] = useState("");
 
+  // 1. Retrieve campaigns from Laravel
+  useEffect(() => {
+    const fetchCampaigns = async () => {
+      try {
+        setLoadingCampaigns(true);
+        setError("");
+
+        const response = await fetch(`${API_URL}/campaigns`);
+
+        if (!response.ok) {
+          throw new Error("Failed to retrieve campaigns.");
+        }
+
+        const result = await response.json();
+
+        const campaignData = Array.isArray(result)
+          ? result
+          : result.data || [];
+
+        setCampaigns(campaignData);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoadingCampaigns(false);
+      }
+    };
+
+    fetchCampaigns();
+  }, []);
+
+  // Filter campaigns based on selected tab
+  const filteredCampaigns = campaigns.filter(
+    (campaign) =>
+      campaign.status?.toLowerCase() === campaignType
+  );
+
+  // Get the currently selected campaign
+  const currentCampaign = campaigns.find(
+    (campaign) => String(campaign.id) === selectedCampaign
+  );
+
+  // 2. Automatically select the first campaign in the selected tab
+  useEffect(() => {
+    if (filteredCampaigns.length > 0) {
+      setSelectedCampaign(String(filteredCampaigns[0].id));
+    } else {
+      setSelectedCampaign("");
+      setAttendance([]);
+    }
+
+    setSearch("");
+    setStatusFilter("All");
+    setDateFilter("");
+  }, [campaignType, campaigns]);
+
+  // 3. Retrieve registrations and attendance for selected campaign
+  useEffect(() => {
+    if (!selectedCampaign) {
+      setAttendance([]);
+      return;
+    }
+
+    const fetchAttendance = async () => {
+      try {
+        setLoadingAttendance(true);
+        setError("");
+
+        const response = await fetch(
+          `${API_URL}/campaigns/${selectedCampaign}/attendance`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to retrieve attendance records.");
+        }
+
+        const result = await response.json();
+
+        const registrations = result.data || [];
+
+        const attendanceData = registrations.map((registration) => {
+          const member = registration.member || {};
+          const attendanceRecord = registration.attendance;
+
+          return {
+            id: registration.id,
+            name: member.full_name || "Unknown Member",
+            email: member.email || "No email",
+            campaign: currentCampaign?.title || "Campaign",
+            date: currentCampaign?.date || "",
+            location: currentCampaign?.location || "Not specified",
+            status: attendanceRecord?.status
+              ? attendanceRecord.status.charAt(0).toUpperCase() +
+                attendanceRecord.status.slice(1)
+              : "Pending",
+          };
+        });
+
+        setAttendance(attendanceData);
+      } catch (err) {
+        setError(err.message);
+        setAttendance([]);
+      } finally {
+        setLoadingAttendance(false);
+      }
+    };
+
+    fetchAttendance();
+  }, [selectedCampaign, campaigns]);
+
+  // 4. Search and filter attendance
   const filteredAttendance = attendance.filter((item) => {
     const searchTerm = search.toLowerCase();
 
@@ -95,16 +157,12 @@ export default function AttendanceManagement() {
     const matchesStatus =
       statusFilter === "All" || item.status === statusFilter;
 
-    const matchesCampaign =
-      campaignFilter === "All" || item.campaign === campaignFilter;
-
     const matchesDate = !dateFilter || item.date === dateFilter;
 
-    return (
-      matchesSearch && matchesStatus && matchesCampaign && matchesDate
-    );
+    return matchesSearch && matchesStatus && matchesDate;
   });
 
+  // 5. Calculate statistics
   const presentCount = attendance.filter(
     (item) => item.status === "Present"
   ).length;
@@ -117,14 +175,51 @@ export default function AttendanceManagement() {
     (item) => item.status === "Pending"
   ).length;
 
-  const updateStatus = (id, newStatus) => {
-    setAttendance((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, status: newStatus } : item
-      )
-    );
+  // 6. Update attendance in Laravel database
+  const updateStatus = async (registrationId, newStatus) => {
+    if (campaignType !== "completed") return;
+
+    try {
+      setUpdatingId(registrationId);
+      setError("");
+
+      const response = await fetch(
+        `${API_URL}/attendance/${registrationId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            status: newStatus.toLowerCase(),
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.message || "Failed to update attendance."
+        );
+      }
+
+      setAttendance((current) =>
+        current.map((item) =>
+          item.id === registrationId
+            ? { ...item, status: newStatus }
+            : item
+        )
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
+  // 7. Export attendance as CSV
   const exportCSV = () => {
     const headers = [
       "Volunteer Name",
@@ -151,9 +246,10 @@ export default function AttendanceManagement() {
         .join(",")
     );
 
-    const csvContent = [headers.map(escapeCSV).join(","), ...rows].join(
-      "\r\n"
-    );
+    const csvContent = [
+      headers.map(escapeCSV).join(","),
+      ...rows,
+    ].join("\r\n");
 
     const blob = new Blob(["\uFEFF" + csvContent], {
       type: "text/csv;charset=utf-8;",
@@ -169,6 +265,7 @@ export default function AttendanceManagement() {
     URL.revokeObjectURL(url);
   };
 
+  // 8. Statistics cards
   const stats = [
     {
       label: "Total Registrations",
@@ -198,6 +295,7 @@ export default function AttendanceManagement() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
+
       {/* Page Header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -216,11 +314,85 @@ export default function AttendanceManagement() {
 
         <button
           onClick={exportCSV}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          disabled={filteredAttendance.length === 0}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download size={18} />
           Export CSV
         </button>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* Campaign Selection */}
+      <div className="mb-6 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+
+        {/* Campaign Type Tabs */}
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+          <button
+            type="button"
+            onClick={() => setCampaignType("completed")}
+            className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
+              campaignType === "completed"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600"
+            }`}
+          >
+            <CheckCircle size={18} />
+            Previous Campaigns
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCampaignType("upcoming")}
+            className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
+              campaignType === "upcoming"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600"
+            }`}
+          >
+            <CalendarDays size={18} />
+            Upcoming Campaigns
+          </button>
+
+        </div>
+
+        <label className="mb-2 block text-sm font-semibold text-slate-700">
+          Select Campaign
+        </label>
+
+        <select
+          value={selectedCampaign}
+          onChange={(e) => setSelectedCampaign(e.target.value)}
+          disabled={loadingCampaigns || filteredCampaigns.length === 0}
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 sm:max-w-md"
+        >
+          <option value="">
+            {loadingCampaigns
+              ? "Loading campaigns..."
+              : filteredCampaigns.length === 0
+                ? "No campaigns available"
+                : "Select a campaign"}
+          </option>
+
+          {filteredCampaigns.map((campaign) => (
+            <option key={campaign.id} value={String(campaign.id)}>
+              {campaign.title}
+            </option>
+          ))}
+        </select>
+
+        {campaignType === "upcoming" && (
+          <p className="mt-3 text-xs text-amber-600">
+            Upcoming campaigns are displayed for registration checking. Attendance can only be marked after a campaign is completed.
+          </p>
+        )}
       </div>
 
       {/* Statistics */}
@@ -236,6 +408,7 @@ export default function AttendanceManagement() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-500">{stat.label}</p>
+
                   <h2 className="mt-2 text-3xl font-bold text-slate-800">
                     {stat.value}
                   </h2>
@@ -252,6 +425,7 @@ export default function AttendanceManagement() {
 
       {/* Attendance Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+
         <div className="border-b border-slate-100 p-5">
           <div className="mb-5 flex items-center gap-3">
             <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
@@ -270,7 +444,8 @@ export default function AttendanceManagement() {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+
             <div className="relative">
               <Search
                 size={18}
@@ -285,20 +460,6 @@ export default function AttendanceManagement() {
                 className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
-
-            <select
-              value={campaignFilter}
-              onChange={(e) => setCampaignFilter(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500"
-            >
-              <option value="All">All Campaigns</option>
-
-              {campaigns.map((campaign) => (
-                <option key={campaign} value={campaign}>
-                  {campaign}
-                </option>
-              ))}
-            </select>
 
             <select
               value={statusFilter}
@@ -321,7 +482,26 @@ export default function AttendanceManagement() {
           </div>
         </div>
 
-        {filteredAttendance.length === 0 ? (
+        {loadingCampaigns || loadingAttendance ? (
+          <div className="px-6 py-16 text-center text-sm text-slate-500">
+            Loading attendance records...
+          </div>
+        ) : !selectedCampaign ? (
+          <div className="px-6 py-16 text-center">
+            <CalendarDays
+              size={35}
+              className="mx-auto mb-3 text-slate-300"
+            />
+
+            <h3 className="font-semibold text-slate-800">
+              No {campaignType === "completed" ? "previous" : "upcoming"} campaigns available
+            </h3>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Campaigns will appear here when their status is updated.
+            </p>
+          </div>
+        ) : filteredAttendance.length === 0 ? (
           <div className="px-6 py-16 text-center">
             <CalendarDays
               size={35}
@@ -333,7 +513,7 @@ export default function AttendanceManagement() {
             </h3>
 
             <p className="mt-2 text-sm text-slate-500">
-              Try changing your search or filters.
+              Try changing your search or filters, or select another campaign.
             </p>
           </div>
         ) : (
@@ -363,6 +543,7 @@ export default function AttendanceManagement() {
                         <p className="font-semibold text-slate-800">
                           {item.name}
                         </p>
+
                         <p className="mt-1 text-sm text-slate-500">
                           {item.email}
                         </p>
@@ -379,6 +560,7 @@ export default function AttendanceManagement() {
                           <CalendarDays size={15} className="text-slate-400" />
                           {item.date}
                         </p>
+
                         <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
                           <MapPin size={15} className="text-slate-400" />
                           {item.location}
@@ -397,41 +579,30 @@ export default function AttendanceManagement() {
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => updateStatus(item.id, "Present")}
+                            disabled={campaignType !== "completed" || updatingId === item.id}
                             title="Mark present"
                             aria-label={`Mark ${item.name} present`}
                             className={`rounded-lg p-2 transition ${
                               item.status === "Present"
                                 ? "bg-green-100 text-green-700"
                                 : "text-green-600 hover:bg-green-50"
-                            }`}
+                            } disabled:cursor-not-allowed disabled:opacity-40`}
                           >
                             <CheckCircle size={19} />
                           </button>
 
                           <button
                             onClick={() => updateStatus(item.id, "Absent")}
+                            disabled={campaignType !== "completed" || updatingId === item.id}
                             title="Mark absent"
                             aria-label={`Mark ${item.name} absent`}
                             className={`rounded-lg p-2 transition ${
                               item.status === "Absent"
                                 ? "bg-red-100 text-red-700"
                                 : "text-red-500 hover:bg-red-50"
-                            }`}
+                            } disabled:cursor-not-allowed disabled:opacity-40`}
                           >
                             <XCircle size={19} />
-                          </button>
-
-                          <button
-                            onClick={() => updateStatus(item.id, "Pending")}
-                            title="Reset to pending"
-                            aria-label={`Reset ${item.name} to pending`}
-                            className={`rounded-lg p-2 transition ${
-                              item.status === "Pending"
-                                ? "bg-amber-100 text-amber-700"
-                                : "text-amber-600 hover:bg-amber-50"
-                            }`}
-                          >
-                            <Clock size={19} />
                           </button>
                         </div>
                       </td>
@@ -453,6 +624,7 @@ export default function AttendanceManagement() {
                       <h3 className="font-semibold text-slate-800">
                         {item.name}
                       </h3>
+
                       <p className="mt-1 break-all text-sm text-slate-500">
                         {item.email}
                       </p>
@@ -484,7 +656,8 @@ export default function AttendanceManagement() {
                   <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
                     <button
                       onClick={() => updateStatus(item.id, "Present")}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
+                      disabled={campaignType !== "completed" || updatingId === item.id}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <CheckCircle size={17} />
                       Present
@@ -492,19 +665,11 @@ export default function AttendanceManagement() {
 
                     <button
                       onClick={() => updateStatus(item.id, "Absent")}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+                      disabled={campaignType !== "completed" || updatingId === item.id}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <XCircle size={17} />
                       Absent
-                    </button>
-
-                    <button
-                      onClick={() => updateStatus(item.id, "Pending")}
-                      title="Reset to pending"
-                      aria-label={`Reset ${item.name} to pending`}
-                      className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700 hover:bg-amber-100"
-                    >
-                      <Clock size={17} />
                     </button>
                   </div>
                 </div>
@@ -515,7 +680,7 @@ export default function AttendanceManagement() {
       </div>
 
       <p className="mt-4 text-xs text-slate-400">
-        Demo data only. Attendance changes are not saved to a database.
+        Attendance records are retrieved from your Kindora database.
       </p>
     </div>
   );

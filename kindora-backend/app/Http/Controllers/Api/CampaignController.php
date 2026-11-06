@@ -1,7 +1,7 @@
 <?php
 
-namespace App\Http\Controllers;
-
+namespace App\Http\Controllers\Api;
+use App\Http\Controllers\Controller;
 use App\Models\Campaign;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -32,9 +32,15 @@ class CampaignController extends Controller
     {
         $this->updateExpiredCampaigns();
 
-        return response()->json(
-            Campaign::orderBy('created_at', 'desc')->get()
-        );
+        $campaigns = Campaign::withCount([
+            'campaignRegistrations as volunteers' => function ($query) {
+                $query->whereIn('status', ['Pending', 'Approved']);
+            }
+        ])
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+        return response()->json($campaigns);
     }
 
     // Create a new campaign
@@ -78,7 +84,11 @@ class CampaignController extends Controller
     {
         $this->updateExpiredCampaigns();
 
-        $campaign = Campaign::findOrFail($id);
+        $campaign = Campaign::withCount([
+            'campaignRegistrations as volunteers' => function ($query) {
+                $query->whereIn('status', ['Pending', 'Approved']);
+            }
+        ])->findOrFail($id);
 
         return response()->json($campaign);
     }

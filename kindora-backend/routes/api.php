@@ -1,8 +1,9 @@
 <?php
-use App\Http\Controllers\CampaignRegistrationController;
+use App\Http\Controllers\Api\CampaignRegistrationController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\MemberController;
-use App\Http\Controllers\CampaignController;
+use App\Http\Controllers\Api\CampaignController;
+use App\Http\Controllers\Api\AttendanceController;
 
 // Test backend
 Route::get('/hello', function () {
@@ -10,10 +11,21 @@ Route::get('/hello', function () {
         'message' => 'Hello from Kindora Backend!'
     ]);
 });
+
+// Attendance Management
+Route::get('/campaigns/{campaignId}/attendance', [AttendanceController::class, 'index']);
+
+Route::put('/attendance/{registrationId}', [AttendanceController::class, 'update']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post(
         '/campaigns/{campaign}/join',
         [CampaignRegistrationController::class, 'join']
+    );
+
+    // Get campaigns joined by the logged-in member
+    Route::get(
+        '/my-campaigns',
+        [CampaignRegistrationController::class, 'myCampaigns']
     );
 });
 

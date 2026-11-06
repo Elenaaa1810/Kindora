@@ -59,6 +59,7 @@ class MemberController extends Controller
         ]);
     }
 
+
     // APPROVE AN APPLICATION
     public function approve(Member $member)
     {
@@ -69,7 +70,7 @@ class MemberController extends Controller
         }
 
         $member->update([
-            'status' => 'approved',
+            'status' => 'Active',
             'rejection_reason' => null,
         ]);
 
@@ -78,6 +79,7 @@ class MemberController extends Controller
             'member' => $member->fresh(),
         ]);
     }
+
 
     // REJECT AN APPLICATION
     public function reject(Request $request, Member $member)
@@ -102,50 +104,58 @@ class MemberController extends Controller
             'member' => $member->fresh(),
         ]);
     }
+
+
     // MEMBER LOGIN
-public function login(Request $request)
-{
-    $validated = $request->validate([
-        'email' => 'required|email',
-        'password' => 'required|string',
-    ]);
+    public function login(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
 
-    // Find member by email
-    $member = Member::where('email', $validated['email'])->first();
+        // Find member by email
+        $member = Member::where('email', $validated['email'])->first();
 
-    // Check email and password
-    if (!$member || !Hash::check($validated['password'], $member->password)) {
+        // Check email and password
+        if (!$member || !Hash::check($validated['password'], $member->password)) {
+            return response()->json([
+                'message' => 'Invalid email or password.',
+            ], 401);
+        }
+
+        // Check application status
+        if ($member->status === 'pending') {
+            return response()->json([
+                'message' => 'Your application is still waiting for admin approval.',
+            ], 403);
+        }
+
+        if ($member->status === 'rejected') {
+            return response()->json([
+                'message' => 'Your application has been rejected. Please contact Kindora for more information.',
+            ], 403);
+        }
+
+        if ($member->status === 'Suspended') {
+            return response()->json([
+                'message' => 'Your account has been suspended. Please contact Kindora for assistance.',
+            ], 403);
+        }
+
+        if ($member->status !== 'Active') {
+            return response()->json([
+                'message' => 'Your account cannot access Kindora.',
+            ], 403);
+        }
+
+        // Generate authentication token
+        $token = $member->createToken('kindora-member')->plainTextToken;
+
         return response()->json([
-            'message' => 'Invalid email or password.',
-        ], 401);
+            'message' => 'Login successful!',
+            'token' => $token,
+            'member' => $member,
+        ]);
     }
-
-    // Check application status
-    if ($member->status === 'pending') {
-        return response()->json([
-            'message' => 'Your application is still waiting for admin approval.',
-        ], 403);
-    }
-
-    if ($member->status === 'rejected') {
-        return response()->json([
-            'message' => 'Your application has been rejected. Please contact Kindora for more information.',
-        ], 403);
-    }
-
-    if ($member->status !== 'approved') {
-        return response()->json([
-            'message' => 'Your account cannot access Kindora.',
-        ], 403);
-    }
-
-    // Generate authentication token
-    $token = $member->createToken('kindora-member')->plainTextToken;
-
-    return response()->json([
-        'message' => 'Login successful!',
-        'token' => $token,
-        'member' => $member,
-    ]);
-}
 }

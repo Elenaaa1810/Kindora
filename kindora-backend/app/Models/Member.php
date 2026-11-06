@@ -8,6 +8,9 @@ use Laravel\Sanctum\HasApiTokens;
 class Member extends Authenticatable
 {
     use HasApiTokens;
+  
+
+    protected $table = 'members';
 
     protected $fillable = [
         'full_name',

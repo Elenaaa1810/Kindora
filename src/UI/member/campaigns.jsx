@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+
+import { Link, useNavigate } from "react-router-dom";
 import Header from "./header";
 import { useState, useEffect } from "react";
 import {
@@ -74,101 +75,214 @@ function formatTime(time) {
 }
 
 export default function Campaigns() {
+  const navigate = useNavigate();
+
   const [campaigns, setCampaigns] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [search, setSearch] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("All locations");
+
   const [joinedCampaigns, setJoinedCampaigns] = useState([]);
+  const [joiningCampaignId, setJoiningCampaignId] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   // Fetch campaigns from Laravel
-  useEffect(() => {
-    async function fetchCampaigns() {
-      try {
-        setLoading(true);
-        setError("");
+  async function fetchCampaigns() {
+    try {
+      setLoading(true);
+      setError("");
 
-        const response = await fetch(API_URL);
+      const response = await fetch(API_URL);
 
-        if (!response.ok) {
-          throw new Error("Unable to load campaigns.");
-        }
-
-        const data = await response.json();
-
-        // Only display upcoming campaigns
-        const upcomingCampaigns = data
-          .filter(
-            (campaign) =>
-              campaign.status?.toLowerCase() === "upcoming"
-          )
-          .map((campaign) => ({
-            ...campaign,
-            // Convert database category to the category used by the UI
-            category:
-              campaign.category === "Donation"
-                ? "Charity"
-                : campaign.category,
-
-            // The backend does not currently store volunteer counts
-            volunteers: Number(campaign.volunteers ?? 0),
-
-            // Use uploaded campaign photo or a default image
-            image:
-              campaign.image_url ||
-              fallbackImages[campaign.category] ||
-              fallbackImages.Community,
-          }));
-
-        setCampaigns(upcomingCampaigns);
-      } catch (err) {
-        console.error("Campaign loading error:", err);
-        setError(
-          "Unable to connect to the campaign server. Please try again."
-        );
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error("Unable to load campaigns.");
       }
+
+      const data = await response.json();
+
+      const upcomingCampaigns = data
+        .filter(
+          (campaign) =>
+            campaign.status?.toLowerCase() === "upcoming"
+        )
+        .map((campaign) => ({
+          ...campaign,
+
+          category:
+            campaign.category === "Donation"
+              ? "Charity"
+              : campaign.category,
+
+          // Get volunteer count from Laravel
+          volunteers: Number(campaign.volunteers ?? 0),
+
+          image:
+            campaign.image_url ||
+            fallbackImages[campaign.category] ||
+            fallbackImages.Community,
+        }));
+
+      setCampaigns(upcomingCampaigns);
+    } catch (err) {
+      console.error("Campaign loading error:", err);
+      setError(
+        "Unable to connect to the campaign server. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+  // Fetch campaigns already joined by the logged-in member
+async function fetchJoinedCampaigns() {
+  const token =
+    localStorage.getItem("memberToken") ||
+    sessionStorage.getItem("memberToken");
+
+  // If the user is not logged in, no campaigns are marked as joined
+  if (!token) {
+    setJoinedCampaigns([]);
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "http://127.0.0.1:8000/api/my-campaigns",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (response.status === 401) {
+      setJoinedCampaigns([]);
+      return;
     }
 
-    fetchCampaigns();
-  }, []);
+    if (!response.ok) {
+      throw new Error("Unable to load your campaign registrations.");
+    }
 
+    const data = await response.json();
+
+    setJoinedCampaigns(
+      (data.campaign_ids || []).map(Number)
+    );
+  } catch (err) {
+    console.error("Joined campaigns loading error:", err);
+  }
+}
+
+  // Load campaigns when the page opens
+useEffect(() => {
+  fetchCampaigns();
+  fetchJoinedCampaigns();
+}, []);
+
+  // Search and filter campaigns
   const filteredCampaigns = campaigns.filter((campaign) => {
     const matchesCategory =
       selectedCategory === "All" ||
       campaign.category === selectedCategory;
 
+    const searchText = search.toLowerCase();
+
     const matchesSearch =
-      campaign.title.toLowerCase().includes(search.toLowerCase()) ||
-      campaign.description.toLowerCase().includes(search.toLowerCase()) ||
-      campaign.location.toLowerCase().includes(search.toLowerCase());
+      (campaign.title || "").toLowerCase().includes(searchText) ||
+      (campaign.description || "").toLowerCase().includes(searchText) ||
+      (campaign.location || "").toLowerCase().includes(searchText);
 
     const matchesLocation =
       selectedLocation === "All locations" ||
-      campaign.location.startsWith(selectedLocation);
+      (campaign.location || "").startsWith(selectedLocation);
 
     return matchesCategory && matchesSearch && matchesLocation;
   });
 
-  function handleJoin(campaign) {
-    if (joinedCampaigns.includes(campaign.id)) {
-      setJoinedCampaigns((previous) =>
-        previous.filter((id) => id !== campaign.id)
+  // Join campaign through Laravel API
+  async function handleJoin(campaign) {
+    const token =
+      localStorage.getItem("memberToken") ||
+      sessionStorage.getItem("memberToken");
+
+    if (!token) {
+      alert("Please log in before joining a campaign.");
+      navigate("/login");
+      return;
+    }
+
+    if (joiningCampaignId !== null) {
+      return;
+    }
+
+    try {
+      setJoiningCampaignId(campaign.id);
+
+      const response = await fetch(
+        `${API_URL}/${campaign.id}/join`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
       );
-      return;
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          alert("Your login session has expired. Please log in again.");
+          navigate("/login");
+          return;
+        }
+
+        if (response.status === 409) {
+          alert("You have already joined this campaign.");
+
+          setJoinedCampaigns((previous) => [
+            ...new Set([...previous, campaign.id]),
+          ]);
+
+          return;
+        }
+
+        alert(data.message || "Unable to join this campaign.");
+        return;
+      }
+
+      // Save joined campaign in React state
+      setJoinedCampaigns((previous) => [
+        ...new Set([...previous, campaign.id]),
+      ]);
+
+      // Update volunteer count immediately
+      setCampaigns((previous) =>
+        previous.map((item) =>
+          item.id === campaign.id
+            ? {
+                ...item,
+                volunteers: Number(
+                  data.volunteers ?? item.volunteers + 1
+                ),
+              }
+            : item
+        )
+      );
+
+      alert(data.message || "You have successfully joined the campaign!");
+    } catch (err) {
+      console.error("Campaign registration error:", err);
+
+      alert("Unable to connect to the server. Please try again.");
+    } finally {
+      setJoiningCampaignId(null);
     }
-
-    if (campaign.volunteers >= campaign.capacity) {
-      alert("Sorry, this campaign is full.");
-      return;
-    }
-
-    setJoinedCampaigns((previous) => [...previous, campaign.id]);
-
-    alert(`You have joined "${campaign.title}" in this demo!`);
   }
 
   return (
@@ -261,7 +375,9 @@ export default function Campaigns() {
             </div>
 
             <p className="text-sm font-medium text-slate-500">
-              {loading ? "Loading campaigns..." : `${filteredCampaigns.length} campaigns found`}
+              {loading
+                ? "Loading campaigns..."
+                : `${filteredCampaigns.length} campaigns found`}
             </p>
           </div>
 
@@ -303,7 +419,7 @@ export default function Campaigns() {
             <div className="mt-8 rounded-2xl border border-red-100 bg-red-50 px-6 py-12 text-center">
               <p className="font-semibold text-red-600">{error}</p>
               <button
-                onClick={() => window.location.reload()}
+                onClick={fetchCampaigns}
                 className="mt-5 rounded-xl bg-[#24364B] px-5 py-3 font-semibold text-white hover:bg-[#344F6B]"
               >
                 Try again
@@ -316,7 +432,11 @@ export default function Campaigns() {
             <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredCampaigns.map((campaign) => {
                 const isJoined = joinedCampaigns.includes(campaign.id);
-                const isFull = campaign.volunteers >= campaign.capacity;
+
+                const isFull =
+                  campaign.volunteers >= campaign.capacity;
+
+                const isJoining = joiningCampaignId === campaign.id;
 
                 return (
                   <article
@@ -407,21 +527,33 @@ export default function Campaigns() {
 
                       <button
                         onClick={() => handleJoin(campaign)}
-                        disabled={isFull && !isJoined}
+                        disabled={
+                          isJoined ||
+                          isFull ||
+                          isJoining ||
+                          joiningCampaignId !== null
+                        }
                         className={`mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-3 font-bold transition ${
                           isJoined
-                            ? "bg-green-100 text-green-700 hover:bg-green-200"
-                            : isFull
-                              ? "cursor-not-allowed bg-slate-100 text-slate-400"
-                              : "bg-[#EAF5FC] text-[#397EAD] hover:bg-[#B8DDF5]"
+                            ? "cursor-not-allowed bg-green-100 text-green-700"
+                            : isJoining
+                              ? "cursor-wait bg-[#DDF0FC] text-[#397EAD]"
+                              : isFull
+                                ? "cursor-not-allowed bg-slate-100 text-slate-400"
+                                : "bg-[#EAF5FC] text-[#397EAD] hover:bg-[#B8DDF5]"
                         }`}
                       >
                         {isJoined
-                          ? "Cancel Registration"
-                          : isFull
-                            ? "Campaign Full"
-                            : "Join Campaign"}
-                        {!isJoined && !isFull && <ArrowRight size={17} />}
+                          ? "Joined"
+                          : isJoining
+                            ? "Joining..."
+                            : isFull
+                              ? "Campaign Full"
+                              : "Join Campaign"}
+
+                        {!isJoined && !isFull && !isJoining && (
+                          <ArrowRight size={17} />
+                        )}
                       </button>
                     </div>
                   </article>
@@ -472,16 +604,16 @@ export default function Campaigns() {
             </div>
 
             <Link
-  to={
-    localStorage.getItem("memberToken") ||
-    sessionStorage.getItem("memberToken")
-      ? "/userprofile"
-      : "/register"
-  }
-  className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#24364B] px-6 py-4 font-bold text-white transition hover:bg-[#344F6B]"
->
-  Become a Volunteer <ArrowRight size={19} />
-</Link>
+              to={
+                localStorage.getItem("memberToken") ||
+                sessionStorage.getItem("memberToken")
+                  ? "/userprofile"
+                  : "/register"
+              }
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#24364B] px-6 py-4 font-bold text-white transition hover:bg-[#344F6B]"
+            >
+              Become a Volunteer <ArrowRight size={19} />
+            </Link>
           </div>
         </section>
       </main>

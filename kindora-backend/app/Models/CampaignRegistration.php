@@ -15,13 +15,18 @@ class CampaignRegistration extends Model
         'status',
     ];
 
-    public function member()
-    {
-        return $this->belongsTo(Member::class);
-    }
+   public function member()
+{
+    return $this->belongsTo(Member::class, 'member_id', 'id');
+}
 
     public function campaign()
     {
         return $this->belongsTo(Campaign::class);
+    }
+
+    public function attendance()
+    {
+        return $this->hasOne(Attendance::class, 'registration_id');
     }
 }
