@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Campaign;
 use App\Models\CampaignRegistration;
 
+
 class CampaignRegistrationController extends Controller
 {
     // MEMBER JOINS A CAMPAIGN
@@ -69,17 +70,95 @@ class CampaignRegistrationController extends Controller
         ], 201);
     }
     // GET CAMPAIGNS THE LOGGED-IN MEMBER HAS JOINED
+// GET MEMBER'S JOINED AND COMPLETED CAMPAIGNS
 public function myCampaigns(Request $request)
 {
     $member = $request->user();
 
-    $campaignIds = CampaignRegistration::where('member_id', $member->id)
-        ->pluck('campaign_id')
-        ->map(fn ($id) => (int) $id)
+    $registrations = CampaignRegistration::with([
+        'campaign',
+        'attendance'
+    ])
+    ->where('member_id', $member->id)
+    ->get();
+
+    // JOINED CAMPAIGNS
+    // Exclude campaigns where attendance is marked present.
+    $joinedCampaigns = $registrations
+        ->filter(function ($registration) {
+            return $registration->attendance?->status !== 'present';
+        })
+        ->map(function ($registration) {
+            $campaign = $registration->campaign;
+
+            if (!$campaign) {
+                return null;
+            }
+
+            return [
+                'registration_id' => $registration->id,
+                'campaign_id' => $campaign->id,
+                'title' => $campaign->title,
+                'category' => $campaign->category,
+                'date' => $campaign->date,
+                'time' => $campaign->time,
+                'location' => $campaign->location,
+                'description' => $campaign->description,
+                'registration_status' => $registration->status,
+                'status' => 'Registered',
+            ];
+        })
+        ->filter()
+        ->values();
+
+    // COMPLETED CAMPAIGNS
+    // Only attendance marked present counts as completed.
+    $completedCampaigns = $registrations
+        ->filter(function ($registration) {
+            return $registration->attendance?->status === 'present';
+        })
+        ->map(function ($registration) {
+            $campaign = $registration->campaign;
+
+            if (!$campaign) {
+                return null;
+            }
+
+            return [
+                'registration_id' => $registration->id,
+                'campaign_id' => $campaign->id,
+                'title' => $campaign->title,
+                'category' => $campaign->category,
+                'date' => $campaign->date,
+                'time' => $campaign->time,
+                'location' => $campaign->location,
+                'description' => $campaign->description,
+                'registration_status' => $registration->status,
+                'attendance_status' => 'present',
+                'status' => 'Completed',
+            ];
+        })
+        ->filter()
         ->values();
 
     return response()->json([
-        'campaign_ids' => $campaignIds,
+        'joined' => $joinedCampaigns,
+        'completed' => $completedCampaigns,
+    ]);
+}
+// GET ALL CAMPAIGN REGISTRATIONS FOR ADMIN NOTIFICATIONS
+public function adminRegistrations()
+{
+    $registrations = CampaignRegistration::with([
+        'member',
+        'campaign'
+    ])
+    ->orderBy('created_at', 'desc')
+    ->get();
+
+    return response()->json([
+        'success' => true,
+        'registrations' => $registrations
     ]);
 }
 }

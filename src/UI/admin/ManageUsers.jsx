@@ -1,5 +1,4 @@
-
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Search,
   Users,
@@ -13,70 +12,11 @@ import {
   Eye,
   Ban,
   RotateCcw,
+  CheckCircle,
+  LoaderCircle,
 } from "lucide-react";
 
-const initialUsers = [
-  {
-    id: 1,
-    name: "Aung Aung",
-    email: "aung@example.com",
-    location: "Mandalay",
-    joined: "2026-09-10",
-    role: "Member",
-    status: "Active",
-    campaigns: 8,
-    hours: 24,
-  },
-  {
-    id: 2,
-    name: "Su Su",
-    email: "susu@example.com",
-    location: "Yangon",
-    joined: "2026-09-15",
-    role: "Member",
-    status: "Active",
-    campaigns: 12,
-    hours: 36,
-  },
-  {
-    id: 3,
-    name: "Mg Mg",
-    email: "mgmg@example.com",
-    location: "Naypyidaw",
-    joined: "2026-09-20",
-    role: "Member",
-    status: "Suspended",
-    campaigns: 2,
-    hours: 5,
-  },
-  {
-    id: 4,
-    name: "Hnin Hnin",
-    email: "hnin@example.com",
-    location: "Mandalay",
-    joined: "2026-09-22",
-    role: "Member",
-    status: "Active",
-    campaigns: 15,
-    hours: 42,
-  },
-  {
-    id: 6,
-    name: "May Thu",
-    email: "may@example.com",
-    location: "Yangon",
-    joined: "2026-10-05",
-    role: "Member",
-    status: "Active",
-    campaigns: 6,
-    hours: 18,
-  },
-];
-
-const statusStyles = {
-  Active: "bg-green-100 text-green-700",
-  Suspended: "bg-red-100 text-red-700",
-};
+const API_URL = "http://127.0.0.1:8000/api";
 
 const avatarColors = [
   "bg-blue-100 text-blue-700",
@@ -86,15 +26,107 @@ const avatarColors = [
   "bg-amber-100 text-amber-700",
 ];
 
+const statusStyles = {
+  Active: "bg-green-100 text-green-700",
+  Suspended: "bg-red-100 text-red-700",
+  pending: "bg-amber-100 text-amber-700",
+  rejected: "bg-slate-100 text-slate-600",
+};
+
+const getToken = () => {
+  return (
+    localStorage.getItem("adminToken") ||
+    sessionStorage.getItem("adminToken") ||
+    localStorage.getItem("memberToken") ||
+    sessionStorage.getItem("memberToken")
+  );
+};
+
+const formatDate = (date) => {
+  if (!date) return "—";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) return "—";
+
+  return parsedDate.toLocaleDateString();
+};
+
+const getInitials = (name = "") => {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+};
+
 export default function ManageUsers() {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [roleFilter, setRoleFilter] = useState("All");
   const [selectedUser, setSelectedUser] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
 
-  // Search and filter users
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Load members from Laravel
+  const fetchMembers = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const token = getToken();
+
+      if (!token) {
+        throw new Error("Please log in as an admin first.");
+      }
+
+      const response = await fetch(`${API_URL}/admin/members`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to load members.");
+      }
+
+      const formattedMembers = (data.members || []).map((member) => ({
+        id: member.id,
+        name: member.full_name || "Unknown Member",
+        email: member.email || "—",
+        phone: member.phone || "—",
+        location: member.location || "—",
+        joined: member.created_at,
+        role: member.role || "Member",
+        status: member.status || "pending",
+        campaigns: member.campaign_registrations_count ?? null,
+        rejectionReason: member.rejection_reason || "",
+      }));
+
+      setUsers(formattedMembers);
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMembers();
+  }, []);
+
+  // Search and filter
   const filteredUsers = users.filter((user) => {
     const searchTerm = search.toLowerCase();
 
@@ -121,22 +153,163 @@ export default function ManageUsers() {
     (user) => user.status === "Suspended"
   ).length;
 
-  // Update member status
-  const updateStatus = (id, status) => {
+  const pendingCount = users.filter(
+    (user) => user.status === "pending"
+  ).length;
+
+  // Update member information in React state
+  const updateMemberInState = (updatedMember) => {
+    const updatedUser = {
+      id: updatedMember.id,
+      name: updatedMember.full_name || "Unknown Member",
+      email: updatedMember.email || "—",
+      phone: updatedMember.phone || "—",
+      location: updatedMember.location || "—",
+      joined: updatedMember.created_at,
+      role: updatedMember.role || "Member",
+      status: updatedMember.status,
+      campaigns: updatedMember.campaign_registrations_count ?? null,
+      rejectionReason: updatedMember.rejection_reason || "",
+    };
+
     setUsers((current) =>
       current.map((user) =>
-        user.id === id ? { ...user, status } : user
+        user.id === updatedUser.id ? updatedUser : user
       )
     );
 
     setSelectedUser((current) =>
-      current?.id === id ? { ...current, status } : current
+      current?.id === updatedUser.id ? updatedUser : current
     );
-
-    setOpenMenu(null);
   };
 
-  // Statistics cards
+  // Send a request to Laravel
+  const sendMemberAction = async (url, method, body = null) => {
+    const token = getToken();
+
+    if (!token) {
+      throw new Error("Please log in as an admin first.");
+    }
+
+    const response = await fetch(`${API_URL}${url}`, {
+      method,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const validationMessage = data.errors
+        ? Object.values(data.errors).flat().join(" ")
+        : "";
+
+      throw new Error(
+        validationMessage || data.message || "The action failed."
+      );
+    }
+
+    if (data.member) {
+      updateMemberInState(data.member);
+    }
+
+    return data;
+  };
+
+  // Approve a pending member
+  const approveMember = async (user) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to approve ${user.name}?`
+    );
+
+    if (!confirmed) return;
+
+    setActionLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const data = await sendMemberAction(
+        `/admin/members/${user.id}/approve`,
+        "PATCH"
+      );
+
+      setSuccess(data.message || "Member approved successfully.");
+      setOpenMenu(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Reject a pending member
+  const rejectMember = async (user) => {
+    const reason = window.prompt(
+      `Enter the rejection reason for ${user.name}:`
+    );
+
+    if (reason === null) return;
+
+    if (!reason.trim()) {
+      setError("Please enter a rejection reason.");
+      return;
+    }
+
+    setActionLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const data = await sendMemberAction(
+        `/admin/members/${user.id}/reject`,
+        "PATCH",
+        { rejection_reason: reason.trim() }
+      );
+
+      setSuccess(data.message || "Application rejected.");
+      setOpenMenu(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Suspend or restore an account
+  const updateStatus = async (user, newStatus) => {
+    const action = newStatus === "Suspended" ? "suspend" : "restore";
+
+    const confirmed = window.confirm(
+      `Are you sure you want to ${action} ${user.name}'s account?`
+    );
+
+    if (!confirmed) return;
+
+    setActionLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const data = await sendMemberAction(
+        `/admin/members/${user.id}/status`,
+        "PATCH",
+        { status: newStatus }
+      );
+
+      setSuccess(data.message || `Account ${action}ed successfully.`);
+      setOpenMenu(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const stats = [
     {
       label: "Total Members",
@@ -156,11 +329,80 @@ export default function ManageUsers() {
       icon: UserX,
       color: "bg-red-100 text-red-600",
     },
+    {
+      label: "Pending Approval",
+      value: pendingCount,
+      icon: CheckCircle,
+      color: "bg-amber-100 text-amber-600",
+    },
   ];
+
+  const renderStatus = (status) => (
+    <span
+      className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${
+        statusStyles[status] || "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {status}
+    </span>
+  );
+
+  const renderActions = (user) => (
+    <>
+      {user.status === "pending" && (
+        <>
+          <button
+            onClick={() => approveMember(user)}
+            disabled={actionLoading}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
+          >
+            <CheckCircle size={16} />
+            Approve Application
+          </button>
+
+          <button
+            onClick={() => rejectMember(user)}
+            disabled={actionLoading}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+          >
+            <Ban size={16} />
+            Reject Application
+          </button>
+        </>
+      )}
+
+      {user.status === "Active" && (
+        <button
+          onClick={() => updateStatus(user, "Suspended")}
+          disabled={actionLoading}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+        >
+          <Ban size={16} />
+          Suspend Account
+        </button>
+      )}
+
+      {user.status === "Suspended" && (
+        <button
+          onClick={() => updateStatus(user, "Active")}
+          disabled={actionLoading}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
+        >
+          <RotateCcw size={16} />
+          Restore Account
+        </button>
+      )}
+
+      {user.status === "rejected" && (
+        <p className="px-3 py-2 text-xs text-slate-500">
+          This application has been rejected.
+        </p>
+      )}
+    </>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
-
       {/* Header */}
       <div className="mb-8">
         <p className="mb-1 text-sm font-medium text-blue-600">
@@ -176,8 +418,30 @@ export default function ManageUsers() {
         </p>
       </div>
 
+      {/* Error and success messages */}
+      {error && (
+        <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p>{error}</p>
+          <button onClick={() => setError("")} aria-label="Dismiss error">
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+          <p>{success}</p>
+          <button
+            onClick={() => setSuccess("")}
+            aria-label="Dismiss success message"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Statistics */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
 
@@ -188,10 +452,7 @@ export default function ManageUsers() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-500">
-                    {stat.label}
-                  </p>
-
+                  <p className="text-sm text-slate-500">{stat.label}</p>
                   <h2 className="mt-2 text-3xl font-bold text-slate-800">
                     {stat.value}
                   </h2>
@@ -208,9 +469,7 @@ export default function ManageUsers() {
 
       {/* Users Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-
         <div className="border-b border-slate-100 p-5">
-
           <div className="mb-5">
             <h2 className="text-lg font-bold text-slate-800">
               Registered Members
@@ -223,7 +482,6 @@ export default function ManageUsers() {
 
           {/* Search and filters */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-
             <div className="relative">
               <Search
                 size={18}
@@ -247,6 +505,8 @@ export default function ManageUsers() {
               <option value="All">All Statuses</option>
               <option value="Active">Active</option>
               <option value="Suspended">Suspended</option>
+              <option value="pending">Pending</option>
+              <option value="rejected">Rejected</option>
             </select>
 
             <select
@@ -258,16 +518,17 @@ export default function ManageUsers() {
               <option value="Member">Member</option>
               <option value="Admin">Admin</option>
             </select>
-
           </div>
         </div>
 
-        {filteredUsers.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center px-6 py-16 text-slate-500">
+            <LoaderCircle size={30} className="mb-3 animate-spin" />
+            <p className="text-sm">Loading members...</p>
+          </div>
+        ) : filteredUsers.length === 0 ? (
           <div className="px-6 py-16 text-center">
-            <Users
-              size={36}
-              className="mx-auto mb-3 text-slate-300"
-            />
+            <Users size={36} className="mx-auto mb-3 text-slate-300" />
 
             <h3 className="font-semibold text-slate-800">
               No members found
@@ -276,19 +537,25 @@ export default function ManageUsers() {
             <p className="mt-2 text-sm text-slate-500">
               Try changing your search or filters.
             </p>
+
+            <button
+              onClick={fetchMembers}
+              className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Refresh Members
+            </button>
           </div>
         ) : (
           <>
             {/* Desktop Table */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left">
-
                 <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-6 py-4 font-semibold">Member</th>
                     <th className="px-6 py-4 font-semibold">Location</th>
                     <th className="px-6 py-4 font-semibold">Joined</th>
-                    <th className="px-6 py-4 font-semibold">Activity</th>
+                    <th className="px-6 py-4 font-semibold">Campaigns</th>
                     <th className="px-6 py-4 font-semibold">Status</th>
                     <th className="px-6 py-4 text-right font-semibold">
                       Actions
@@ -302,7 +569,6 @@ export default function ManageUsers() {
                       key={user.id}
                       className="transition hover:bg-slate-50"
                     >
-                      {/* Member */}
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
                           <div
@@ -310,22 +576,16 @@ export default function ManageUsers() {
                               avatarColors[index % avatarColors.length]
                             }`}
                           >
-                            {user.name
-                              .split(" ")
-                              .map((part) => part[0])
-                              .join("")
-                              .slice(0, 2)}
+                            {getInitials(user.name)}
                           </div>
 
                           <div>
                             <p className="font-semibold text-slate-800">
                               {user.name}
                             </p>
-
                             <p className="mt-1 text-sm text-slate-500">
                               {user.email}
                             </p>
-
                             <p className="mt-1 text-xs text-slate-400">
                               {user.role}
                             </p>
@@ -333,7 +593,6 @@ export default function ManageUsers() {
                         </div>
                       </td>
 
-                      {/* Location */}
                       <td className="px-6 py-5">
                         <p className="flex items-center gap-2 text-sm text-slate-600">
                           <MapPin size={15} className="text-slate-400" />
@@ -341,42 +600,29 @@ export default function ManageUsers() {
                         </p>
                       </td>
 
-                      {/* Joined */}
                       <td className="px-6 py-5">
                         <p className="flex items-center gap-2 text-sm text-slate-600">
                           <CalendarDays
                             size={15}
                             className="text-slate-400"
                           />
-                          {user.joined}
+                          {formatDate(user.joined)}
                         </p>
                       </td>
 
-                      {/* Activity */}
+                      <td className="px-6 py-5 text-sm text-slate-600">
+                        {user.campaigns === null
+                          ? "—"
+                          : `${user.campaigns} campaigns`}
+                      </td>
+
                       <td className="px-6 py-5">
-                        <p className="text-sm font-semibold text-slate-700">
-                          {user.campaigns} campaigns
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          {user.hours} volunteering hours
-                        </p>
+                        {renderStatus(user.status)}
                       </td>
 
-                      {/* Status */}
-                      <td className="px-6 py-5">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyles[user.status]}`}
-                        >
-                          {user.status}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
                       <td className="px-6 py-5">
                         <div className="flex justify-end">
                           <div className="relative">
-
                             <button
                               onClick={() =>
                                 setOpenMenu(
@@ -391,8 +637,7 @@ export default function ManageUsers() {
                             </button>
 
                             {openMenu === user.id && (
-                              <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-slate-100 bg-white p-2 shadow-lg">
-
+                              <div className="absolute right-0 top-10 z-20 w-52 rounded-xl border border-slate-100 bg-white p-2 shadow-lg">
                                 <button
                                   onClick={() => {
                                     setSelectedUser(user);
@@ -404,30 +649,7 @@ export default function ManageUsers() {
                                   View Details
                                 </button>
 
-                                {user.status === "Active" && (
-                                  <button
-                                    onClick={() =>
-                                      updateStatus(user.id, "Suspended")
-                                    }
-                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                                  >
-                                    <Ban size={16} />
-                                    Suspend Account
-                                  </button>
-                                )}
-
-                                {user.status === "Suspended" && (
-                                  <button
-                                    onClick={() =>
-                                      updateStatus(user.id, "Active")
-                                    }
-                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-green-700 hover:bg-green-50"
-                                  >
-                                    <RotateCcw size={16} />
-                                    Restore Account
-                                  </button>
-                                )}
-
+                                {renderActions(user)}
                               </div>
                             )}
                           </div>
@@ -452,11 +674,7 @@ export default function ManageUsers() {
                         avatarColors[index % avatarColors.length]
                       }`}
                     >
-                      {user.name
-                        .split(" ")
-                        .map((part) => part[0])
-                        .join("")
-                        .slice(0, 2)}
+                      {getInitials(user.name)}
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -464,12 +682,7 @@ export default function ManageUsers() {
                         <h3 className="font-semibold text-slate-800">
                           {user.name}
                         </h3>
-
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyles[user.status]}`}
-                        >
-                          {user.status}
-                        </span>
+                        {renderStatus(user.status)}
                       </div>
 
                       <p className="mt-1 break-all text-sm text-slate-500">
@@ -486,16 +699,15 @@ export default function ManageUsers() {
 
                     <p className="flex items-center gap-2">
                       <CalendarDays size={15} />
-                      Joined {user.joined}
+                      Joined {formatDate(user.joined)}
                     </p>
 
                     <p>
-                      {user.campaigns} campaigns · {user.hours} volunteer hours
+                      Campaigns: {user.campaigns ?? "—"}
                     </p>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-
                     <button
                       onClick={() => setSelectedUser(user)}
                       className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
@@ -503,26 +715,41 @@ export default function ManageUsers() {
                       View Details
                     </button>
 
-                    {user.status === "Active" ? (
+                    {user.status === "pending" ? (
+                      <>
+                        <button
+                          onClick={() => approveMember(user)}
+                          disabled={actionLoading}
+                          className="rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 disabled:opacity-50"
+                        >
+                          Approve
+                        </button>
+
+                        <button
+                          onClick={() => rejectMember(user)}
+                          disabled={actionLoading}
+                          className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : user.status === "Active" ? (
                       <button
-                        onClick={() =>
-                          updateStatus(user.id, "Suspended")
-                        }
-                        className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+                        onClick={() => updateStatus(user, "Suspended")}
+                        disabled={actionLoading}
+                        className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-50"
                       >
                         Suspend
                       </button>
-                    ) : (
+                    ) : user.status === "Suspended" ? (
                       <button
-                        onClick={() =>
-                          updateStatus(user.id, "Active")
-                        }
-                        className="rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
+                        onClick={() => updateStatus(user, "Active")}
+                        disabled={actionLoading}
+                        className="rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 disabled:opacity-50"
                       >
                         Restore
                       </button>
-                    )}
-
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -531,9 +758,20 @@ export default function ManageUsers() {
         )}
       </div>
 
-      <p className="mt-4 text-xs text-slate-400">
-        Demo data only. Changes are not saved to a database.
-      </p>
+      {/* Refresh and loading indicator */}
+      <div className="mt-4 flex items-center justify-between">
+        <p className="text-xs text-slate-400">
+          Member information is loaded from your database.
+        </p>
+
+        <button
+          onClick={fetchMembers}
+          disabled={loading}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Refresh
+        </button>
+      </div>
 
       {/* Member Details Modal */}
       {selectedUser && (
@@ -551,7 +789,6 @@ export default function ManageUsers() {
             aria-labelledby="user-details-title"
             className="my-auto w-full max-w-lg rounded-2xl bg-white shadow-xl"
           >
-            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h2
                 id="user-details-title"
@@ -569,37 +806,38 @@ export default function ManageUsers() {
               </button>
             </div>
 
-            {/* Modal Content */}
             <div className="p-6">
-
               <div className="mb-6 flex flex-col items-center text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-xl font-bold text-blue-700">
-                  {selectedUser.name
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2)}
+                  {getInitials(selectedUser.name)}
                 </div>
 
                 <h3 className="mt-3 text-lg font-bold text-slate-800">
                   {selectedUser.name}
                 </h3>
 
-                <span
-                  className={`mt-2 rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[selectedUser.status]}`}
-                >
-                  {selectedUser.status}
-                </span>
+                <div className="mt-2">
+                  {renderStatus(selectedUser.status)}
+                </div>
               </div>
 
               <div className="space-y-4">
-
                 <div className="flex items-start gap-3">
                   <Mail size={18} className="mt-0.5 text-slate-400" />
                   <div>
                     <p className="text-xs text-slate-500">Email</p>
                     <p className="break-all text-sm font-medium text-slate-700">
                       {selectedUser.email}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Users size={18} className="mt-0.5 text-slate-400" />
+                  <div>
+                    <p className="text-xs text-slate-500">Phone</p>
+                    <p className="text-sm font-medium text-slate-700">
+                      {selectedUser.phone}
                     </p>
                   </div>
                 </div>
@@ -622,51 +860,68 @@ export default function ManageUsers() {
                   <div>
                     <p className="text-xs text-slate-500">Date Joined</p>
                     <p className="text-sm font-medium text-slate-700">
-                      {selectedUser.joined}
+                      {formatDate(selectedUser.joined)}
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">Campaigns</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-800">
-                      {selectedUser.campaigns}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">Volunteer Hours</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-800">
-                      {selectedUser.hours}
-                    </p>
-                  </div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    Campaign Registrations
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-slate-800">
+                    {selectedUser.campaigns ?? "—"}
+                  </p>
                 </div>
 
+                {selectedUser.rejectionReason && (
+                  <div className="rounded-xl bg-red-50 p-4">
+                    <p className="text-sm font-semibold text-red-700">
+                      Rejection Reason
+                    </p>
+                    <p className="mt-1 text-sm text-red-600">
+                      {selectedUser.rejectionReason}
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* Modal Actions */}
               <div className="mt-6 flex flex-wrap gap-3">
+                {selectedUser.status === "pending" ? (
+                  <>
+                    <button
+                      onClick={() => approveMember(selectedUser)}
+                      disabled={actionLoading}
+                      className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
 
-                {selectedUser.status === "Active" ? (
+                    <button
+                      onClick={() => rejectMember(selectedUser)}
+                      disabled={actionLoading}
+                      className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </>
+                ) : selectedUser.status === "Active" ? (
                   <button
-                    onClick={() =>
-                      updateStatus(selectedUser.id, "Suspended")
-                    }
-                    className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
+                    onClick={() => updateStatus(selectedUser, "Suspended")}
+                    disabled={actionLoading}
+                    className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                   >
                     Suspend Account
                   </button>
-                ) : (
+                ) : selectedUser.status === "Suspended" ? (
                   <button
-                    onClick={() =>
-                      updateStatus(selectedUser.id, "Active")
-                    }
-                    className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700"
+                    onClick={() => updateStatus(selectedUser, "Active")}
+                    disabled={actionLoading}
+                    className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                   >
                     Restore Account
                   </button>
-                )}
+                ) : null}
 
                 <button
                   onClick={() => setSelectedUser(null)}
@@ -674,13 +929,11 @@ export default function ManageUsers() {
                 >
                   Close
                 </button>
-
               </div>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

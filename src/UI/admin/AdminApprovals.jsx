@@ -21,6 +21,30 @@ import {
 
 const API_URL = "http://127.0.0.1:8000/api/admin/members";
 
+// Include admin authentication token in every request
+const getAdminHeaders = () => {
+  const token = localStorage.getItem("adminToken");
+
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+};
+
+// Read Laravel response and display useful errors
+const readResponse = async (response) => {
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || `Request failed with status ${response.status}`
+    );
+  }
+
+  return data;
+};
+
 const statusStyles = {
   Pending: "bg-amber-50 text-amber-700",
   Approved: "bg-emerald-50 text-emerald-700",
@@ -39,56 +63,91 @@ export default function MemberApprovals() {
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Convert Laravel data into the format used by this page.
-  const formatApplicant = (member) => ({
-    id: member.id,
-    name: member.full_name,
-    email: member.email,
-    phone: member.phone || "Not provided",
-    location: member.location || "Not provided",
+  // Convert Laravel data into the format used by this page
+  const formatApplicant = (member) => {
+    const rawStatus = member.status || "pending";
 
-    date: member.created_at
-      ? new Date(member.created_at).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })
-      : "Not available",
+    let interests = member.interests || [];
 
-    reason: member.reason,
-    motivation: member.motivation,
-    interests: member.interests || [],
-    previousExperience: member.previous_experience ? "Yes" : "No",
-    experienceDetails: member.experience_details || "",
-    availability: member.availability,
+    if (typeof interests === "string") {
+      try {
+        interests = JSON.parse(interests);
+      } catch {
+        interests = interests ? [interests] : [];
+      }
+    }
 
-    status:
-      member.status.charAt(0).toUpperCase() +
-      member.status.slice(1),
+    if (!Array.isArray(interests)) {
+      interests = [];
+    }
 
-    rejectionReason: member.rejection_reason || "",
-  });
+    // FIX: Convert database Active status into Approved
+    const normalizedStatus = String(rawStatus).trim().toLowerCase();
 
-  // Load applications from Laravel.
+    let displayStatus = "Pending";
+
+    if (
+      normalizedStatus === "active" ||
+      normalizedStatus === "approved"
+    ) {
+      displayStatus = "Approved";
+    } else if (normalizedStatus === "rejected") {
+      displayStatus = "Rejected";
+    } else if (normalizedStatus === "pending") {
+      displayStatus = "Pending";
+    }
+
+    return {
+      id: member.id,
+      name: member.full_name || member.name || "Unknown Member",
+      email: member.email || "No email",
+      phone: member.phone || "Not provided",
+      location: member.location || "Not provided",
+
+      date: member.created_at
+        ? new Date(member.created_at).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
+        : "Not available",
+
+      reason: member.reason || "Not provided",
+      motivation: member.motivation || "Not provided",
+      interests,
+
+      previousExperience: member.previous_experience ? "Yes" : "No",
+      experienceDetails: member.experience_details || "",
+      availability: member.availability || "Not provided",
+
+      status: displayStatus,
+
+      rejectionReason: member.rejection_reason || "",
+    };
+  };
+
+  // Load applications from Laravel
   const fetchApplicants = async () => {
     try {
       setError("");
 
       const response = await fetch(API_URL, {
-        headers: {
-          Accept: "application/json",
-        },
+        method: "GET",
+        headers: getAdminHeaders(),
       });
 
-      const data = await response.json();
+      const data = await readResponse(response);
 
-      if (!response.ok) {
-        throw new Error(data.message || "Could not load applications.");
-      }
+      const members = Array.isArray(data)
+        ? data
+        : data.members || data.data || [];
 
-      setApplicants(data.members.map(formatApplicant));
+      setApplicants(members.map(formatApplicant));
+
+      return true;
     } catch (err) {
       setError(err.message || "Unable to connect to Laravel.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -98,7 +157,7 @@ export default function MemberApprovals() {
     fetchApplicants();
   }, []);
 
-  // Application counts.
+  // Application counts
   const pendingCount = applicants.filter(
     (user) => user.status === "Pending"
   ).length;
@@ -111,7 +170,7 @@ export default function MemberApprovals() {
     (user) => user.status === "Rejected"
   ).length;
 
-  // Search and filter applications.
+  // Search and filter applications
   const filteredApplicants = applicants.filter((user) => {
     const matchesTab = user.status === activeTab;
 
@@ -122,7 +181,7 @@ export default function MemberApprovals() {
     return matchesTab && matchesSearch;
   });
 
-  // Approve application through Laravel.
+  // Approve application through Laravel
   const handleApprove = async (id) => {
     try {
       setActionLoading(true);
@@ -130,28 +189,24 @@ export default function MemberApprovals() {
 
       const response = await fetch(`${API_URL}/${id}/approve`, {
         method: "PATCH",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+        headers: getAdminHeaders(),
       });
 
-      const data = await response.json();
+      await readResponse(response);
 
-      if (!response.ok) {
-        throw new Error(data.message || "Could not approve application.");
+      const refreshed = await fetchApplicants();
+
+      if (refreshed) {
+        setSelectedApplicant(null);
       }
-
-      await fetchApplicants();
-      setSelectedApplicant(null);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Could not approve application.");
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Reject application through Laravel.
+  // Reject application through Laravel
   const handleReject = async () => {
     if (!rejectionReason.trim() || !rejectingApplicant) {
       return;
@@ -165,31 +220,24 @@ export default function MemberApprovals() {
         `${API_URL}/${rejectingApplicant.id}/reject`,
         {
           method: "PATCH",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
+          headers: getAdminHeaders(),
           body: JSON.stringify({
             rejection_reason: rejectionReason.trim(),
           }),
         }
       );
 
-      const data = await response.json();
+      await readResponse(response);
 
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Could not reject application."
-        );
+      const refreshed = await fetchApplicants();
+
+      if (refreshed) {
+        setRejectingApplicant(null);
+        setSelectedApplicant(null);
+        setRejectionReason("");
       }
-
-      await fetchApplicants();
-
-      setRejectingApplicant(null);
-      setSelectedApplicant(null);
-      setRejectionReason("");
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Could not reject application.");
     } finally {
       setActionLoading(false);
     }
@@ -397,9 +445,9 @@ export default function MemberApprovals() {
 
                     <td className="px-6 py-4">
                       <div className="flex max-w-xs flex-wrap gap-1.5">
-                        {user.interests.map((interest) => (
+                        {user.interests.map((interest, index) => (
                           <span
-                            key={interest}
+                            key={`${interest}-${index}`}
                             className="rounded-lg bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700"
                           >
                             {interest}
@@ -413,7 +461,9 @@ export default function MemberApprovals() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyles[user.status]}`}>
+                      <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                        statusStyles[user.status] || statusStyles.Pending
+                      }`}>
                         {user.status}
                       </span>
                     </td>
@@ -486,6 +536,7 @@ export default function MemberApprovals() {
             </div>
 
             <div className="max-h-[75vh] space-y-5 overflow-y-auto p-5">
+
               {/* PROFILE */}
               <div className="flex items-center gap-4">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sky-100 text-2xl font-bold text-sky-700">
@@ -495,7 +546,9 @@ export default function MemberApprovals() {
                   <h3 className="text-lg font-bold text-slate-800">
                     {selectedApplicant.name}
                   </h3>
-                  <span className={`mt-1 inline-block rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[selectedApplicant.status]}`}>
+                  <span className={`mt-1 inline-block rounded-full px-3 py-1 text-xs font-semibold ${
+                    statusStyles[selectedApplicant.status] || statusStyles.Pending
+                  }`}>
                     {selectedApplicant.status}
                   </span>
                 </div>
@@ -587,9 +640,9 @@ export default function MemberApprovals() {
                     Volunteer Interests
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {selectedApplicant.interests.map((interest) => (
+                    {selectedApplicant.interests.map((interest, index) => (
                       <span
-                        key={interest}
+                        key={`${interest}-${index}`}
                         className="rounded-lg bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700"
                       >
                         {interest}

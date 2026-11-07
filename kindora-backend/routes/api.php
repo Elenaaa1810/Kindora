@@ -1,8 +1,11 @@
+
 <?php
-use App\Http\Controllers\Api\CampaignRegistrationController;
+
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\AdminAuthController;
 use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\CampaignController;
+use App\Http\Controllers\Api\CampaignRegistrationController;
 use App\Http\Controllers\Api\AttendanceController;
 
 // Test backend
@@ -12,39 +15,123 @@ Route::get('/hello', function () {
     ]);
 });
 
-// Attendance Management
-Route::get('/campaigns/{campaignId}/attendance', [AttendanceController::class, 'index']);
+// ========================================
+// PUBLIC ROUTES
+// ========================================
 
-Route::put('/attendance/{registrationId}', [AttendanceController::class, 'update']);
-Route::middleware('auth:sanctum')->group(function () {
-    Route::post(
-        '/campaigns/{campaign}/join',
-        [CampaignRegistrationController::class, 'join']
-    );
+// Admin login
+Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
-    // Get campaigns joined by the logged-in member
-    Route::get(
-        '/my-campaigns',
-        [CampaignRegistrationController::class, 'myCampaigns']
-    );
-});
-
-// Member registration
+// Member registration and login
 Route::post('/register', [MemberController::class, 'register']);
-
-// Admin member approvals
-Route::get('/admin/members', [MemberController::class, 'index']);
-Route::patch('/admin/members/{member}/approve', [MemberController::class, 'approve']);
-Route::patch('/admin/members/{member}/reject', [MemberController::class, 'reject']);
-
 Route::post('/login', [MemberController::class, 'login']);
 
-// Campaign management
+// View campaigns
 Route::get('/campaigns', [CampaignController::class, 'index']);
-Route::post('/campaigns', [CampaignController::class, 'store']);
 Route::get('/campaigns/{id}', [CampaignController::class, 'show']);
-Route::put('/campaigns/{id}', [CampaignController::class, 'update']);
-Route::delete('/campaigns/{id}', [CampaignController::class, 'destroy']);
 
-// Mark campaign as completed
-Route::patch('/campaigns/{id}/complete', [CampaignController::class, 'markCompleted']);
+
+// ========================================
+// MEMBER PROTECTED ROUTES
+// ========================================
+
+Route::middleware('auth:sanctum')->group(function () {
+
+    // Member profile
+    Route::get('/member/profile', [
+        MemberController::class,
+        'profile'
+    ]);
+
+    Route::put('/member/profile', [
+        MemberController::class,
+        'update'
+    ]);
+
+    // Join campaign
+    Route::post('/campaigns/{campaign}/join', [
+        CampaignRegistrationController::class,
+        'join'
+    ]);
+
+    // Get campaigns joined by logged-in member
+    Route::get('/my-campaigns', [
+        CampaignRegistrationController::class,
+        'myCampaigns'
+    ]);
+
+});
+
+
+
+// ADMIN PROTECTED ROUTES
+
+
+Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+
+    // Admin logout
+    Route::post('/admin/logout', [
+        AdminAuthController::class,
+        'logout'
+    ]);
+
+    // Member management
+    Route::get('/admin/members', [
+        MemberController::class,
+        'index'
+    ]);
+
+    Route::patch('/admin/members/{member}/approve', [
+        MemberController::class,
+        'approve'
+    ]);
+
+    Route::patch('/admin/members/{member}/reject', [
+        MemberController::class,
+        'reject'
+    ]);
+
+    Route::patch('/admin/members/{member}/status', [
+        MemberController::class,
+        'updateStatus'
+    ]);
+
+    // Campaign management
+   
+      Route::post('/admin/campaigns', [
+        CampaignController::class,
+        'store'
+    ]);
+
+    Route::put('/campaigns/{id}', [
+        CampaignController::class,
+        'update'
+    ]);
+
+    Route::delete('/campaigns/{id}', [
+        CampaignController::class,
+        'destroy'
+    ]);
+
+    Route::patch('/campaigns/{id}/complete', [
+        CampaignController::class,
+        'markCompleted'
+    ]);
+
+    // Attendance management
+    Route::get('/campaigns/{campaignId}/attendance', [
+        AttendanceController::class,
+        'index'
+    ]);
+
+    Route::put('/attendance/{registrationId}', [
+        AttendanceController::class,
+        'update'
+    ]);
+    // Get all campaign registrations for admin notifications
+Route::get('/admin/campaign-registrations', [
+    CampaignRegistrationController::class,
+    'adminRegistrations'
+]);
+
+});

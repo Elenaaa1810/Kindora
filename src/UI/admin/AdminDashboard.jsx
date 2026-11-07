@@ -1,386 +1,389 @@
-
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Users,
+  Megaphone,
   CalendarDays,
-  ClipboardCheck,
-  Clock,
-  ArrowUpRight,
-  ArrowRight,
   MapPin,
+  Clock,
+  RefreshCw,
+  ArrowUpRight,
   HeartHandshake,
-  Sprout,
-  HandHeart,
 } from "lucide-react";
 
-const stats = [
-  {
-    title: "Total Users",
-    value: "248",
-    note: "Registered members",
-    icon: Users,
-    color: "bg-sky-100 text-sky-700",
-  },
-  {
-    title: "Total Campaigns",
-    value: "36",
-    note: "Created campaigns",
-    icon: CalendarDays,
-    color: "bg-violet-100 text-violet-700",
-  },
-  {
-    title: "Pending Attendance",
-    value: "12",
-    note: "Awaiting approval",
-    icon: ClipboardCheck,
-    color: "bg-amber-100 text-amber-700",
-  },
-  {
-    title: "Volunteer Hours",
-    value: "1,284",
-    note: "Verified total hours",
-    icon: Clock,
-    color: "bg-emerald-100 text-emerald-700",
-  },
-];
+const API_URL = "http://127.0.0.1:8000/api";
 
-const campaigns = [
-  {
-    title: "Community Park Cleanup",
-    category: "Environment",
-    date: "Oct 20, 2026",
-    location: "Mandalay",
-    volunteers: 24,
-    limit: 40,
-    status: "Upcoming",
-    color: "bg-emerald-100 text-emerald-700",
-  },
-  {
-    title: "Helping Hands Donation",
-    category: "Donation",
-    date: "Oct 23, 2026",
-    location: "Mandalay",
-    volunteers: 18,
-    limit: 30,
-    status: "Upcoming",
-    color: "bg-sky-100 text-sky-700",
-  },
-  {
-    title: "School Supply Collection",
-    category: "Education",
-    date: "Oct 26, 2026",
-    location: "Amarapura",
-    volunteers: 15,
-    limit: 25,
-    status: "Upcoming",
-    color: "bg-violet-100 text-violet-700",
-  },
-];
+// Get admin authentication token
+const getAdminHeaders = () => {
+  const token = localStorage.getItem("adminToken");
 
-const activities = [
-  {
-    name: "Aung Aung",
-    action: "registered for",
-    campaign: "Community Park Cleanup",
-    time: "10 minutes ago",
-    initials: "AA",
-    color: "bg-sky-100 text-sky-700",
-  },
-  {
-    name: "Su Su",
-    action: "registered for",
-    campaign: "Helping Hands Donation",
-    time: "35 minutes ago",
-    initials: "SS",
-    color: "bg-pink-100 text-pink-700",
-  },
-  {
-    name: "Mg Mg",
-    action: "submitted attendance for",
-    campaign: "School Supply Collection",
-    time: "1 hour ago",
-    initials: "MM",
-    color: "bg-violet-100 text-violet-700",
-  },
-];
+  return {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+};
 
-export default function AdminDashboard() {
+// Handle API response
+const readResponse = async (response) => {
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Something went wrong.");
+  }
+
+  return data;
+};
+
+// Get array from different possible API response formats
+const getArrayData = (data, key) => {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.[key])) {
+    return data[key];
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
+
+  return [];
+};
+
+// Format campaign date
+const formatDate = (date) => {
+  if (!date) return "Date not available";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Date not available";
+  }
+
+  return parsedDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const AdminDashboard = () => {
+  const [members, setMembers] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Fetch dashboard data
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const headers = getAdminHeaders();
+
+      // Fetch members and campaigns from Laravel
+      const [memberResponse, campaignResponse] = await Promise.all([
+        fetch(`${API_URL}/admin/members`, {
+          method: "GET",
+          headers,
+        }),
+
+        fetch(`${API_URL}/campaigns`, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        }),
+      ]);
+
+      const memberData = await readResponse(memberResponse);
+      const campaignData = await readResponse(campaignResponse);
+
+      const memberList = getArrayData(memberData, "members");
+      const campaignList = getArrayData(campaignData, "campaigns");
+
+      setMembers(memberList);
+      setCampaigns(campaignList);
+    } catch (err) {
+      console.error("Dashboard loading error:", err);
+      setError(err.message || "Failed to load dashboard data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  // Filter upcoming campaigns
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const upcomingCampaigns = campaigns
+    .filter((campaign) => {
+      if (!campaign.date) return false;
+
+      const campaignDate = new Date(campaign.date);
+
+      if (Number.isNaN(campaignDate.getTime())) {
+        return false;
+      }
+
+      campaignDate.setHours(0, 0, 0, 0);
+
+      const status = String(campaign.status || "").toLowerCase();
+
+      return (
+        campaignDate >= today &&
+        status !== "completed" &&
+        status !== "cancelled"
+      );
+    })
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Dashboard statistics
+  const stats = [
+    {
+      title: "Total Members",
+      value: members.length,
+      icon: Users,
+      description: "Registered members",
+      iconBg: "bg-blue-100",
+      iconColor: "text-blue-600",
+    },
+    {
+      title: "Total Campaigns",
+      value: campaigns.length,
+      icon: Megaphone,
+      description: "All campaigns",
+      iconBg: "bg-purple-100",
+      iconColor: "text-purple-600",
+    },
+  ];
+
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
-      {/* Welcome section */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-100 via-blue-50 to-indigo-100 p-6 sm:p-8 lg:p-10">
-        <div className="relative z-10 max-w-2xl">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 text-sm font-medium text-sky-700">
-            <HeartHandshake size={17} />
-            Volunteer Management
-          </div>
+    <div className="min-h-screen bg-[#F7FAFD] p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl space-y-8">
 
-          <h1 className="text-2xl font-bold leading-tight text-slate-800 sm:text-3xl lg:text-4xl">
-            Welcome back, Admin!
-          </h1>
-
-          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
-            Here's what's happening in your community.
-            Manage campaigns, review attendance, and help
-            your volunteers make a difference.
-          </p>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href="/admin/campaigns"
-              className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-700"
-            >
-              Manage Campaigns
-              <ArrowRight size={17} />
-            </a>
-
-            <a
-              href="/admin/attendance"
-              className="inline-flex items-center gap-2 rounded-xl border border-white bg-white/80 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
-            >
-              Review Attendance
-            </a>
-          </div>
-        </div>
-
-        <div className="absolute -right-8 -top-12 hidden h-64 w-64 items-center justify-center rounded-full bg-white/30 md:flex">
-          <div className="flex h-44 w-44 items-center justify-center rounded-full bg-white/40">
-            <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-white/70 text-sky-600 shadow-sm">
-              <HandHeart size={60} strokeWidth={1.4} />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Statistics */}
-      <section>
-        <div className="mb-5">
-          <h2 className="text-lg font-bold text-slate-800">
-            Overview
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            A quick look at your volunteer community.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((stat) => {
-            const Icon = stat.icon;
-
-            return (
-              <div
-                key={stat.title}
-                className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-500">
-                      {stat.title}
-                    </p>
-                    <h3 className="mt-3 text-3xl font-bold text-slate-800">
-                      {stat.value}
-                    </h3>
-                  </div>
-
-                  <div className={`rounded-xl p-3 ${stat.color}`}>
-                    <Icon size={23} />
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  {stat.note}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Impact banner */}
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="flex items-center gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5">
-          <div className="rounded-xl bg-white p-3 text-emerald-600">
-            <Sprout size={25} />
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Trees Planted</p>
-            <p className="text-2xl font-bold text-slate-800">560</p>
-            <p className="mt-1 text-xs text-emerald-700">
-              Community impact
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 rounded-2xl border border-rose-100 bg-rose-50/70 p-5">
-          <div className="rounded-xl bg-white p-3 text-rose-500">
-            <HandHeart size={25} />
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Donation Packages</p>
-            <p className="text-2xl font-bold text-slate-800">320</p>
-            <p className="mt-1 text-xs text-rose-600">
-              Packages collected
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-5">
-          <div className="rounded-xl bg-white p-3 text-sky-600">
-            <Users size={25} />
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Completed Campaigns</p>
-            <p className="text-2xl font-bold text-slate-800">28</p>
-            <p className="mt-1 text-xs text-sky-700">
-              Community activities
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Campaign list */}
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 sm:p-6">
-          <div>
-            <h2 className="text-lg font-bold text-slate-800">
-              Upcoming Campaigns
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Keep track of your upcoming activities.
-            </p>
-          </div>
-
-          <a
-            href="/admin/campaigns"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
-          >
-            View all
-            <ArrowUpRight size={17} />
-          </a>
-        </div>
-
-        <div className="divide-y divide-slate-100">
-          {campaigns.map((campaign) => (
-            <div
-              key={campaign.title}
-              className="flex flex-col gap-4 p-5 transition hover:bg-slate-50/70 sm:p-6 lg:flex-row lg:items-center lg:justify-between"
-            >
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
-                  <CalendarDays size={23} />
-                </div>
-
-                <div>
-                  <h3 className="font-semibold text-slate-800">
-                    {campaign.title}
-                  </h3>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
-                    <span className="flex items-center gap-1.5">
-                      <CalendarDays size={14} />
-                      {campaign.date}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <MapPin size={14} />
-                      {campaign.location}
-                    </span>
-                  </div>
-
-                  <span
-                    className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${campaign.color}`}
-                  >
-                    {campaign.category}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-4 lg:min-w-52 lg:justify-end">
-                <div className="min-w-28">
-                  <div className="flex items-center justify-between gap-3 text-xs">
-                    <span className="text-slate-500">
-                      Volunteers
-                    </span>
-                    <span className="font-semibold text-slate-700">
-                      {campaign.volunteers}/{campaign.limit}
-                    </span>
-                  </div>
-
-                  <div className="mt-2 h-2 w-32 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-sky-500"
-                      style={{
-                        width: `${Math.min(
-                          (campaign.volunteers / campaign.limit) * 100,
-                          100
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
-                  {campaign.status}
+        {/* Welcome Section */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#438FC4] to-[#75B5E0] p-6 text-white shadow-sm sm:p-8">
+          <div className="relative z-10 flex flex-col justify-between gap-6 md:flex-row md:items-center">
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <HeartHandshake size={25} />
+                <span className="text-sm font-semibold tracking-wide">
+                  KINDORA ADMIN
                 </span>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
 
-      {/* Recent activity */}
-      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 p-5 sm:p-6">
-          <div>
-            <h2 className="text-lg font-bold text-slate-800">
-              Recent Activity
+              <h1 className="text-2xl font-bold sm:text-3xl">
+                Welcome Back, Admin!
+              </h1>
+
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-blue-50 sm:text-base">
+                Manage your community, monitor members, and keep track of
+                upcoming volunteer campaigns.
+              </p>
+            </div>
+
+            <button
+              onClick={fetchDashboardData}
+              disabled={loading}
+              className="flex w-fit items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[#438FC4] shadow-sm transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <RefreshCw
+                size={17}
+                className={loading ? "animate-spin" : ""}
+              />
+              Refresh Dashboard
+            </button>
+          </div>
+
+          <div className="absolute -right-10 -top-16 h-64 w-64 rounded-full bg-white/10" />
+          <div className="absolute -bottom-24 right-40 h-56 w-56 rounded-full bg-white/10" />
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 sm:flex-row sm:items-center sm:justify-between">
+            <p>{error}</p>
+
+            <button
+              onClick={fetchDashboardData}
+              className="font-semibold underline"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {/* Statistics */}
+        <section>
+          <div className="mb-5">
+            <h2 className="text-xl font-bold text-[#24364B]">
+              Dashboard Overview
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Latest volunteer activity on your platform.
+            <p className="mt-1 text-sm text-gray-500">
+              A quick overview of your Kindora community.
             </p>
           </div>
 
-          <div className="rounded-xl bg-sky-50 p-2.5 text-sky-600">
-            <ClipboardCheck size={21} />
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            {stats.map((stat, index) => {
+              const Icon = stat.icon;
+
+              return (
+                <div
+                  key={index}
+                  className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">
+                        {stat.title}
+                      </p>
+
+                      <h3 className="mt-3 text-3xl font-bold text-[#24364B]">
+                        {loading ? "..." : stat.value}
+                      </h3>
+
+                      <p className="mt-2 text-xs text-gray-400">
+                        {stat.description}
+                      </p>
+                    </div>
+
+                    <div
+                      className={`flex h-14 w-14 items-center justify-center rounded-2xl ${stat.iconBg}`}
+                    >
+                      <Icon size={26} className={stat.iconColor} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </section>
 
-        <div className="divide-y divide-slate-100 px-5 sm:px-6">
-          {activities.map((activity) => (
-            <div
-              key={`${activity.name}-${activity.time}`}
-              className="flex items-start gap-3 py-5"
-            >
-              <div
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold ${activity.color}`}
-              >
-                {activity.initials}
-              </div>
+        {/* Upcoming Campaigns */}
+        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-7">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-[#24364B]">
+                Upcoming Campaigns
+              </h2>
 
-              <div className="min-w-0 flex-1">
-                <p className="text-sm leading-6 text-slate-700">
-                  <span className="font-semibold text-slate-800">
-                    {activity.name}
-                  </span>{" "}
-                  {activity.action}{" "}
-                  <span className="font-medium text-sky-700">
-                    {activity.campaign}
-                  </span>
-                </p>
-
-                <p className="mt-1 text-xs text-slate-400">
-                  {activity.time}
-                </p>
-              </div>
+              <p className="mt-1 text-sm text-gray-500">
+                Campaigns scheduled for the coming days.
+              </p>
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* Footer note */}
-      <footer className="pb-2 text-center text-xs text-slate-400">
-        Every small action creates a better community.
-      </footer>
+            <a
+              href="/admin/campaigns"
+              className="flex w-fit items-center gap-2 text-sm font-semibold text-[#438FC4] transition hover:text-[#24364B]"
+            >
+              Manage Campaigns
+              <ArrowUpRight size={17} />
+            </a>
+          </div>
+
+          {loading ? (
+            <div className="py-12 text-center">
+              <RefreshCw
+                size={25}
+                className="mx-auto animate-spin text-[#438FC4]"
+              />
+              <p className="mt-3 text-sm text-gray-500">
+                Loading campaigns...
+              </p>
+            </div>
+          ) : upcomingCampaigns.length === 0 ? (
+            <div className="rounded-xl bg-[#F7FAFD] px-4 py-12 text-center">
+              <CalendarDays
+                size={35}
+                className="mx-auto text-gray-300"
+              />
+
+              <h3 className="mt-3 font-semibold text-[#24364B]">
+                No Upcoming Campaigns
+              </h3>
+
+              <p className="mt-1 text-sm text-gray-500">
+                There are currently no upcoming campaigns.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {upcomingCampaigns.slice(0, 5).map((campaign) => (
+                <div
+                  key={campaign.id}
+                  className="flex flex-col gap-4 rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:bg-[#F7FAFD] sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex min-w-0 items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#DDF0FC]">
+                      <Megaphone
+                        size={23}
+                        className="text-[#438FC4]"
+                      />
+                    </div>
+
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold text-[#24364B]">
+                        {campaign.title ||
+                          campaign.name ||
+                          "Untitled Campaign"}
+                      </h3>
+
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <CalendarDays size={14} />
+                          {formatDate(campaign.date)}
+                        </span>
+
+                        {campaign.location && (
+                          <span className="flex items-center gap-1">
+                            <MapPin size={14} />
+                            {campaign.location}
+                          </span>
+                        )}
+
+                        {campaign.category && (
+                          <span className="flex items-center gap-1">
+                            <Clock size={14} />
+                            {campaign.category}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 sm:justify-end">
+                    {campaign.capacity != null && (
+                      <span className="text-xs text-gray-500">
+                        Capacity: {campaign.capacity}
+                      </span>
+                    )}
+
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold capitalize text-[#438FC4]">
+                      {campaign.status || "Upcoming"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {upcomingCampaigns.length > 5 && (
+                <p className="pt-2 text-center text-xs text-gray-400">
+                  Showing 5 of {upcomingCampaigns.length} upcoming campaigns.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+      </div>
     </div>
   );
-}
+};
+
+export default AdminDashboard;

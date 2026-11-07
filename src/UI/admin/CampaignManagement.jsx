@@ -17,8 +17,9 @@ import {
   ImagePlus,
 } from "lucide-react";
 
-// Laravel API URL
+// Laravel API URLs
 const API_URL = "http://127.0.0.1:8000/api/campaigns";
+const ADMIN_API_URL = "http://127.0.0.1:8000/api/admin/campaigns";
 
 const emptyForm = {
   title: "",
@@ -59,6 +60,23 @@ export default function CampaignManagement() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Get admin authentication headers
+  const getAdminConfig = () => {
+    const token = localStorage.getItem("adminToken");
+
+    if (!token) {
+      alert("Admin session expired. Please log in again.");
+      return null;
+    }
+
+    return {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    };
+  };
 
   // Get campaigns from Laravel
   const fetchCampaigns = async () => {
@@ -111,6 +129,12 @@ export default function CampaignManagement() {
   const resetImage = () => {
     setSelectedImage(null);
     setImagePreview("");
+
+    const fileInput = document.getElementById("campaign-image-input");
+
+    if (fileInput) {
+      fileInput.value = "";
+    }
   };
 
   // Open add campaign form
@@ -189,6 +213,10 @@ export default function CampaignManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const config = getAdminConfig();
+
+    if (!config) return;
+
     const selectedDate = new Date(`${form.date}T00:00:00`);
     const today = new Date();
 
@@ -227,8 +255,9 @@ export default function CampaignManagement() {
         formData.append("_method", "PUT");
 
         const response = await axios.post(
-          `${API_URL}/${editingId}`,
-          formData
+          `${ADMIN_API_URL}/${editingId}`,
+          formData,
+          config
         );
 
         const updatedCampaign = formatCampaign(response.data.campaign);
@@ -242,7 +271,11 @@ export default function CampaignManagement() {
         alert("Campaign updated successfully!");
       } else {
         // Create new campaign in Laravel
-        const response = await axios.post(API_URL, formData);
+        const response = await axios.post(
+          ADMIN_API_URL,
+          formData,
+          config
+        );
 
         const newCampaign = formatCampaign(response.data.campaign);
 
@@ -255,13 +288,22 @@ export default function CampaignManagement() {
       setForm(emptyForm);
       setEditingId(null);
       resetImage();
+
+      // Reload campaigns to get the latest database data
+      fetchCampaigns();
     } catch (error) {
       console.error("Error saving campaign:", error);
 
       const validationErrors = error.response?.data?.errors;
 
-      if (validationErrors) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        alert(
+          error.response?.data?.message ||
+            "Your admin session is invalid or expired. Please log in again."
+        );
+      } else if (validationErrors) {
         const firstError = Object.values(validationErrors)[0]?.[0];
+
         alert(firstError || "Please check your campaign information.");
       } else {
         alert(
@@ -282,10 +324,14 @@ export default function CampaignManagement() {
 
     if (!confirmed) return;
 
+    const config = getAdminConfig();
+
+    if (!config) return;
+
     try {
       setError("");
 
-      await axios.delete(`${API_URL}/${id}`);
+      await axios.delete(`${ADMIN_API_URL}/${id}`, config);
 
       setCampaigns((current) =>
         current.filter((campaign) => campaign.id !== id)
@@ -295,20 +341,33 @@ export default function CampaignManagement() {
     } catch (error) {
       console.error("Error deleting campaign:", error);
 
-      alert(
-        error.response?.data?.message ||
-          "Unable to delete campaign. Please try again."
-      );
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        alert(
+          error.response?.data?.message ||
+            "Your admin session is invalid or expired. Please log in again."
+        );
+      } else {
+        alert(
+          error.response?.data?.message ||
+            "Unable to delete campaign. Please try again."
+        );
+      }
     }
   };
 
   // Mark campaign as completed
   const markCompleted = async (id) => {
+    const config = getAdminConfig();
+
+    if (!config) return;
+
     try {
       setError("");
 
       const response = await axios.patch(
-        `${API_URL}/${id}/complete`
+        `${ADMIN_API_URL}/${id}/complete`,
+        {},
+        config
       );
 
       const updatedCampaign = formatCampaign(response.data.campaign);
@@ -323,10 +382,17 @@ export default function CampaignManagement() {
     } catch (error) {
       console.error("Error updating campaign status:", error);
 
-      alert(
-        error.response?.data?.message ||
-          "Unable to update campaign status."
-      );
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        alert(
+          error.response?.data?.message ||
+            "Your admin session is invalid or expired. Please log in again."
+        );
+      } else {
+        alert(
+          error.response?.data?.message ||
+            "Unable to update campaign status."
+        );
+      }
     }
   };
 
@@ -898,6 +964,7 @@ export default function CampaignManagement() {
                   </span>
 
                   <input
+                    id="campaign-image-input"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
                     onChange={handleImageChange}
@@ -915,15 +982,7 @@ export default function CampaignManagement() {
 
                     <button
                       type="button"
-                      onClick={() => {
-                        resetImage();
-
-                        const fileInput = document.getElementById(
-                          "campaign-image-input"
-                        );
-
-                        if (fileInput) fileInput.value = "";
-                      }}
+                      onClick={resetImage}
                       className="absolute right-2 top-2 rounded-full bg-white p-2 text-red-500 shadow hover:bg-red-50"
                       aria-label="Remove selected image"
                     >

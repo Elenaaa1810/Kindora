@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Member;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Hash;
+
+
 
 class MemberController extends Controller
 {
@@ -50,14 +53,16 @@ class MemberController extends Controller
 
 
     // GET ALL MEMBER APPLICATIONS
-    public function index()
-    {
-        $members = Member::latest()->get();
+public function index()
+{
+    $members = Member::withCount('campaignRegistrations')
+        ->latest()
+        ->get();
 
-        return response()->json([
-            'members' => $members,
-        ]);
-    }
+    return response()->json([
+        'members' => $members,
+    ]);
+}
 
 
     // APPROVE AN APPLICATION
@@ -158,4 +163,74 @@ class MemberController extends Controller
             'member' => $member,
         ]);
     }
+    // GET LOGGED-IN MEMBER PROFILE
+        public function profile(Request $request)
+        {
+            $member = $request->user();
+
+            return response()->json([
+                'message' => 'Profile retrieved successfully.',
+                'member' => $member->makeHidden([
+                    'password',
+                    'remember_token',
+                ]),
+            ]);
+        }
+        // UPDATE MEMBER PROFILE
+public function update(Request $request)
+{
+    $member = $request->user();
+
+    $validated = $request->validate([
+        'full_name' => 'required|string|max:255',
+
+        'email' => [
+            'required',
+            'email',
+            'max:255',
+            Rule::unique('members', 'email')->ignore($member->id),
+        ],
+
+        'phone' => 'nullable|string|max:20',
+
+        'location' => 'nullable|string|max:255',
+
+        'motivation' => 'nullable|string|max:1000',
+    ]);
+
+    $member->update($validated);
+
+    return response()->json([
+        'message' => 'Profile updated successfully!',
+        'member' => $member,
+    ], 200);
+}
+// SUSPEND OR RESTORE A MEMBER ACCOUNT
+public function updateStatus(Request $request, Member $member)
+{
+    $validated = $request->validate([
+        'status' => [
+            'required',
+            Rule::in(['Active', 'Suspended']),
+        ],
+    ]);
+
+    // Only approved members can be suspended or restored.
+    if (!in_array($member->status, ['Active', 'Suspended'])) {
+        return response()->json([
+            'message' => 'Only approved members can be suspended or restored.',
+        ], 422);
+    }
+
+    $member->update([
+        'status' => $validated['status'],
+    ]);
+
+    return response()->json([
+        'message' => $validated['status'] === 'Suspended'
+            ? 'Member account suspended successfully.'
+            : 'Member account restored successfully.',
+        'member' => $member->fresh(),
+    ]);
+}
 }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Search,
@@ -13,6 +12,30 @@ import {
 } from "lucide-react";
 
 const API_URL = "http://127.0.0.1:8000/api";
+
+// Get the logged-in admin token
+const getAdminHeaders = () => {
+  const token = localStorage.getItem("adminToken");
+
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+};
+
+// Read API responses and show useful Laravel errors
+const readResponse = async (response) => {
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      result.message || `Request failed with status ${response.status}`
+    );
+  }
+
+  return result;
+};
 
 const statusStyles = {
   Present: "bg-green-100 text-green-700",
@@ -43,13 +66,12 @@ export default function AttendanceManagement() {
         setLoadingCampaigns(true);
         setError("");
 
-        const response = await fetch(`${API_URL}/campaigns`);
+        const response = await fetch(`${API_URL}/campaigns`, {
+          method: "GET",
+          headers: getAdminHeaders(),
+        });
 
-        if (!response.ok) {
-          throw new Error("Failed to retrieve campaigns.");
-        }
-
-        const result = await response.json();
+        const result = await readResponse(response);
 
         const campaignData = Array.isArray(result)
           ? result
@@ -58,6 +80,7 @@ export default function AttendanceManagement() {
         setCampaigns(campaignData);
       } catch (err) {
         setError(err.message);
+        setCampaigns([]);
       } finally {
         setLoadingCampaigns(false);
       }
@@ -66,7 +89,7 @@ export default function AttendanceManagement() {
     fetchCampaigns();
   }, []);
 
-  // Filter campaigns based on selected tab
+  // 2. Filter campaigns based on selected tab
   const filteredCampaigns = campaigns.filter(
     (campaign) =>
       campaign.status?.toLowerCase() === campaignType
@@ -77,7 +100,7 @@ export default function AttendanceManagement() {
     (campaign) => String(campaign.id) === selectedCampaign
   );
 
-  // 2. Automatically select the first campaign in the selected tab
+  // 3. Automatically select the first campaign in the selected tab
   useEffect(() => {
     if (filteredCampaigns.length > 0) {
       setSelectedCampaign(String(filteredCampaigns[0].id));
@@ -91,12 +114,14 @@ export default function AttendanceManagement() {
     setDateFilter("");
   }, [campaignType, campaigns]);
 
-  // 3. Retrieve registrations and attendance for selected campaign
+  // 4. Retrieve registrations and attendance
   useEffect(() => {
     if (!selectedCampaign) {
       setAttendance([]);
       return;
     }
+
+    let cancelled = false;
 
     const fetchAttendance = async () => {
       try {
@@ -104,48 +129,69 @@ export default function AttendanceManagement() {
         setError("");
 
         const response = await fetch(
-          `${API_URL}/campaigns/${selectedCampaign}/attendance`
+          `${API_URL}/campaigns/${selectedCampaign}/attendance`,
+          {
+            method: "GET",
+            headers: getAdminHeaders(),
+          }
         );
 
-        if (!response.ok) {
-          throw new Error("Failed to retrieve attendance records.");
-        }
+        const result = await readResponse(response);
 
-        const result = await response.json();
-
-        const registrations = result.data || [];
+        const registrations = Array.isArray(result)
+          ? result
+          : result.data || [];
 
         const attendanceData = registrations.map((registration) => {
           const member = registration.member || {};
           const attendanceRecord = registration.attendance;
 
+          const rawStatus =
+            typeof attendanceRecord === "object"
+              ? attendanceRecord?.status
+              : attendanceRecord;
+
+          const formattedStatus = rawStatus
+            ? rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1)
+            : "Pending";
+
           return {
             id: registration.id,
-            name: member.full_name || "Unknown Member",
+            name: member.full_name || member.name || "Unknown Member",
             email: member.email || "No email",
             campaign: currentCampaign?.title || "Campaign",
-            date: currentCampaign?.date || "",
+            date:
+              currentCampaign?.date ||
+              currentCampaign?.campaign_date ||
+              "",
             location: currentCampaign?.location || "Not specified",
-            status: attendanceRecord?.status
-              ? attendanceRecord.status.charAt(0).toUpperCase() +
-                attendanceRecord.status.slice(1)
-              : "Pending",
+            status: formattedStatus,
           };
         });
 
-        setAttendance(attendanceData);
+        if (!cancelled) {
+          setAttendance(attendanceData);
+        }
       } catch (err) {
-        setError(err.message);
-        setAttendance([]);
+        if (!cancelled) {
+          setError(err.message);
+          setAttendance([]);
+        }
       } finally {
-        setLoadingAttendance(false);
+        if (!cancelled) {
+          setLoadingAttendance(false);
+        }
       }
     };
 
     fetchAttendance();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedCampaign, campaigns]);
 
-  // 4. Search and filter attendance
+  // 5. Search and filter attendance
   const filteredAttendance = attendance.filter((item) => {
     const searchTerm = search.toLowerCase();
 
@@ -162,7 +208,7 @@ export default function AttendanceManagement() {
     return matchesSearch && matchesStatus && matchesDate;
   });
 
-  // 5. Calculate statistics
+  // 6. Calculate statistics
   const presentCount = attendance.filter(
     (item) => item.status === "Present"
   ).length;
@@ -175,7 +221,7 @@ export default function AttendanceManagement() {
     (item) => item.status === "Pending"
   ).length;
 
-  // 6. Update attendance in Laravel database
+  // 7. Update attendance in Laravel database
   const updateStatus = async (registrationId, newStatus) => {
     if (campaignType !== "completed") return;
 
@@ -187,23 +233,14 @@ export default function AttendanceManagement() {
         `${API_URL}/attendance/${registrationId}`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
+          headers: getAdminHeaders(),
           body: JSON.stringify({
             status: newStatus.toLowerCase(),
           }),
         }
       );
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result.message || "Failed to update attendance."
-        );
-      }
+      await readResponse(response);
 
       setAttendance((current) =>
         current.map((item) =>
@@ -219,7 +256,7 @@ export default function AttendanceManagement() {
     }
   };
 
-  // 7. Export attendance as CSV
+  // 8. Export attendance as CSV
   const exportCSV = () => {
     const headers = [
       "Volunteer Name",
@@ -265,7 +302,7 @@ export default function AttendanceManagement() {
     URL.revokeObjectURL(url);
   };
 
-  // 8. Statistics cards
+  // 9. Statistics cards
   const stats = [
     {
       label: "Total Registrations",
@@ -295,7 +332,6 @@ export default function AttendanceManagement() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
-
       {/* Page Header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -331,10 +367,7 @@ export default function AttendanceManagement() {
 
       {/* Campaign Selection */}
       <div className="mb-6 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-
-        {/* Campaign Type Tabs */}
         <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-
           <button
             type="button"
             onClick={() => setCampaignType("completed")}
@@ -360,7 +393,6 @@ export default function AttendanceManagement() {
             <CalendarDays size={18} />
             Upcoming Campaigns
           </button>
-
         </div>
 
         <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -377,8 +409,8 @@ export default function AttendanceManagement() {
             {loadingCampaigns
               ? "Loading campaigns..."
               : filteredCampaigns.length === 0
-                ? "No campaigns available"
-                : "Select a campaign"}
+              ? "No campaigns available"
+              : "Select a campaign"}
           </option>
 
           {filteredCampaigns.map((campaign) => (
@@ -390,7 +422,8 @@ export default function AttendanceManagement() {
 
         {campaignType === "upcoming" && (
           <p className="mt-3 text-xs text-amber-600">
-            Upcoming campaigns are displayed for registration checking. Attendance can only be marked after a campaign is completed.
+            Upcoming campaigns are displayed for registration checking.
+            Attendance can only be marked after a campaign is completed.
           </p>
         )}
       </div>
@@ -425,7 +458,6 @@ export default function AttendanceManagement() {
 
       {/* Attendance Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-
         <div className="border-b border-slate-100 p-5">
           <div className="mb-5 flex items-center gap-3">
             <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
@@ -445,7 +477,6 @@ export default function AttendanceManagement() {
 
           {/* Filters */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-
             <div className="relative">
               <Search
                 size={18}
@@ -525,7 +556,9 @@ export default function AttendanceManagement() {
                   <tr>
                     <th className="px-6 py-4 font-semibold">Volunteer</th>
                     <th className="px-6 py-4 font-semibold">Campaign</th>
-                    <th className="px-6 py-4 font-semibold">Date & Location</th>
+                    <th className="px-6 py-4 font-semibold">
+                      Date & Location
+                    </th>
                     <th className="px-6 py-4 font-semibold">Status</th>
                     <th className="px-6 py-4 text-right font-semibold">
                       Update Attendance
@@ -557,19 +590,27 @@ export default function AttendanceManagement() {
 
                       <td className="px-6 py-5">
                         <p className="flex items-center gap-2 text-sm text-slate-700">
-                          <CalendarDays size={15} className="text-slate-400" />
-                          {item.date}
+                          <CalendarDays
+                            size={15}
+                            className="text-slate-400"
+                          />
+                          {item.date || "Not specified"}
                         </p>
 
                         <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-                          <MapPin size={15} className="text-slate-400" />
+                          <MapPin
+                            size={15}
+                            className="text-slate-400"
+                          />
                           {item.location}
                         </p>
                       </td>
 
                       <td className="px-6 py-5">
                         <span
-                          className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyles[item.status]}`}
+                          className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${
+                            statusStyles[item.status] || statusStyles.Pending
+                          }`}
                         >
                           {item.status}
                         </span>
@@ -579,7 +620,10 @@ export default function AttendanceManagement() {
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => updateStatus(item.id, "Present")}
-                            disabled={campaignType !== "completed" || updatingId === item.id}
+                            disabled={
+                              campaignType !== "completed" ||
+                              updatingId === item.id
+                            }
                             title="Mark present"
                             aria-label={`Mark ${item.name} present`}
                             className={`rounded-lg p-2 transition ${
@@ -593,7 +637,10 @@ export default function AttendanceManagement() {
 
                           <button
                             onClick={() => updateStatus(item.id, "Absent")}
-                            disabled={campaignType !== "completed" || updatingId === item.id}
+                            disabled={
+                              campaignType !== "completed" ||
+                              updatingId === item.id
+                            }
                             title="Mark absent"
                             aria-label={`Mark ${item.name} absent`}
                             className={`rounded-lg p-2 transition ${
@@ -631,7 +678,9 @@ export default function AttendanceManagement() {
                     </div>
 
                     <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyles[item.status]}`}
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        statusStyles[item.status] || statusStyles.Pending
+                      }`}
                     >
                       {item.status}
                     </span>
@@ -644,7 +693,7 @@ export default function AttendanceManagement() {
 
                     <p className="flex items-center gap-2">
                       <CalendarDays size={15} />
-                      {item.date}
+                      {item.date || "Not specified"}
                     </p>
 
                     <p className="flex items-center gap-2">
@@ -656,7 +705,10 @@ export default function AttendanceManagement() {
                   <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
                     <button
                       onClick={() => updateStatus(item.id, "Present")}
-                      disabled={campaignType !== "completed" || updatingId === item.id}
+                      disabled={
+                        campaignType !== "completed" ||
+                        updatingId === item.id
+                      }
                       className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <CheckCircle size={17} />
@@ -665,7 +717,10 @@ export default function AttendanceManagement() {
 
                     <button
                       onClick={() => updateStatus(item.id, "Absent")}
-                      disabled={campaignType !== "completed" || updatingId === item.id}
+                      disabled={
+                        campaignType !== "completed" ||
+                        updatingId === item.id
+                      }
                       className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <XCircle size={17} />
