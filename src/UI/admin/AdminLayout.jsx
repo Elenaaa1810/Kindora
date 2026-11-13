@@ -85,7 +85,9 @@ const formatNotificationDate = (date) => {
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
-  const [notificationsViewed, setNotificationsViewed] = useState(false);
+  const [notificationsViewed, setNotificationsViewed] = useState(
+  localStorage.getItem("adminNotificationsViewed") === "true"
+);
   const [notifications, setNotifications] = useState([]);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState("");
@@ -243,17 +245,19 @@ export default function AdminLayout() {
   };
 
   // Click notification bell
-  const handleBellClick = () => {
-    const willOpen = !notificationOpen;
+ const handleBellClick = () => {
+  const willOpen = !notificationOpen;
 
-    setNotificationOpen(willOpen);
+  setNotificationOpen(willOpen);
 
-    if (willOpen) {
-      // Hide notification number when bell is clicked
-      setNotificationsViewed(true);
-      fetchNotifications();
-    }
-  };
+  if (willOpen) {
+    // Remember that admin has viewed notifications
+    setNotificationsViewed(true);
+    localStorage.setItem("adminNotificationsViewed", "true");
+
+    fetchNotifications();
+  }
+};
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
@@ -406,10 +410,9 @@ export default function AdminLayout() {
                 <Bell size={21} />
 
                 {/* Hide number after bell is clicked */}
+                {/* Red notification dot */}
                 {notifications.length > 0 && !notificationsViewed && (
-                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
-                    {notifications.length > 9 ? "9+" : notifications.length}
-                  </span>
+                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
                 )}
               </button>
 

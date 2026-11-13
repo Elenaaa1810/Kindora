@@ -15,6 +15,7 @@ import {
   Sparkles,
   Clock,
   Filter,
+  X,
 } from "lucide-react";
 
 const API_URL = "http://127.0.0.1:8000/api/campaigns";
@@ -82,13 +83,17 @@ export default function Campaigns() {
   const [search, setSearch] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("All locations");
 
+  const [activeTab, setActiveTab] = useState("Upcoming");
+
   const [joinedCampaigns, setJoinedCampaigns] = useState([]);
   const [joiningCampaignId, setJoiningCampaignId] = useState(null);
+
+  const [selectedCampaign, setSelectedCampaign] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Fetch campaigns from Laravel
+  // Fetch all campaigns from Laravel
   async function fetchCampaigns() {
     try {
       setLoading(true);
@@ -102,29 +107,23 @@ export default function Campaigns() {
 
       const data = await response.json();
 
-      const upcomingCampaigns = data
-        .filter(
-          (campaign) =>
-            campaign.status?.toLowerCase() === "upcoming"
-        )
-        .map((campaign) => ({
-          ...campaign,
+      const allCampaigns = data.map((campaign) => ({
+        ...campaign,
 
-          category:
-            campaign.category === "Donation"
-              ? "Charity"
-              : campaign.category,
+        category:
+          campaign.category === "Donation"
+            ? "Charity"
+            : campaign.category,
 
-          // Get volunteer count from Laravel
-          volunteers: Number(campaign.volunteers ?? 0),
+        volunteers: Number(campaign.volunteers ?? 0),
 
-          image:
-            campaign.image_url ||
-            fallbackImages[campaign.category] ||
-            fallbackImages.Community,
-        }));
+        image:
+          campaign.image_url ||
+          fallbackImages[campaign.category] ||
+          fallbackImages.Community,
+      }));
 
-      setCampaigns(upcomingCampaigns);
+      setCampaigns(allCampaigns);
     } catch (err) {
       console.error("Campaign loading error:", err);
       setError(
@@ -134,57 +133,92 @@ export default function Campaigns() {
       setLoading(false);
     }
   }
+
   // Fetch campaigns already joined by the logged-in member
-async function fetchJoinedCampaigns() {
-  const token =
-    localStorage.getItem("memberToken") ||
-    sessionStorage.getItem("memberToken");
+  async function fetchJoinedCampaigns() {
+    const token =
+      localStorage.getItem("memberToken") ||
+      sessionStorage.getItem("memberToken");
 
-  // If the user is not logged in, no campaigns are marked as joined
-  if (!token) {
-    setJoinedCampaigns([]);
-    return;
-  }
-
-  try {
-    const response = await fetch(
-      "http://127.0.0.1:8000/api/my-campaigns",
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      }
-    );
-
-    if (response.status === 401) {
+    if (!token) {
       setJoinedCampaigns([]);
       return;
     }
 
-    if (!response.ok) {
-      throw new Error("Unable to load your campaign registrations.");
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/my-campaigns",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (response.status === 401) {
+        setJoinedCampaigns([]);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("Unable to load your campaign registrations.");
+      }
+
+      const data = await response.json();
+
+      setJoinedCampaigns(
+        (data.campaign_ids || []).map(Number)
+      );
+    } catch (err) {
+      console.error("Joined campaigns loading error:", err);
     }
-
-    const data = await response.json();
-
-    setJoinedCampaigns(
-      (data.campaign_ids || []).map(Number)
-    );
-  } catch (err) {
-    console.error("Joined campaigns loading error:", err);
   }
-}
 
   // Load campaigns when the page opens
-useEffect(() => {
-  fetchCampaigns();
-  fetchJoinedCampaigns();
-}, []);
+  useEffect(() => {
+    fetchCampaigns();
+    fetchJoinedCampaigns();
+  }, []);
 
-  // Search and filter campaigns
+  // Close modal with Escape key
+  useEffect(() => {
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setSelectedCampaign(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  // Prevent background scrolling when modal is open
+  useEffect(() => {
+    if (selectedCampaign) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedCampaign]);
+
+  // Filter campaigns by tab, category, search and location
   const filteredCampaigns = campaigns.filter((campaign) => {
+    const status = campaign.status?.toLowerCase();
+
+    const matchesTab =
+      activeTab === "Upcoming"
+        ? status === "upcoming"
+        : status === "completed";
+
     const matchesCategory =
       selectedCategory === "All" ||
       campaign.category === selectedCategory;
@@ -200,7 +234,12 @@ useEffect(() => {
       selectedLocation === "All locations" ||
       (campaign.location || "").startsWith(selectedLocation);
 
-    return matchesCategory && matchesSearch && matchesLocation;
+    return (
+      matchesTab &&
+      matchesCategory &&
+      matchesSearch &&
+      matchesLocation
+    );
   });
 
   // Join campaign through Laravel API
@@ -256,23 +295,35 @@ useEffect(() => {
         return;
       }
 
-      // Save joined campaign in React state
+      // Update joined campaign status
       setJoinedCampaigns((previous) => [
         ...new Set([...previous, campaign.id]),
       ]);
 
-      // Update volunteer count immediately
+      // Update volunteer count
+      const updatedVolunteers = Number(
+        data.volunteers ?? campaign.volunteers + 1
+      );
+
       setCampaigns((previous) =>
         previous.map((item) =>
           item.id === campaign.id
             ? {
                 ...item,
-                volunteers: Number(
-                  data.volunteers ?? item.volunteers + 1
-                ),
+                volunteers: updatedVolunteers,
               }
             : item
         )
+      );
+
+      // Update selected campaign details
+      setSelectedCampaign((previous) =>
+        previous?.id === campaign.id
+          ? {
+              ...previous,
+              volunteers: updatedVolunteers,
+            }
+          : previous
       );
 
       alert(data.message || "You have successfully joined the campaign!");
@@ -283,6 +334,13 @@ useEffect(() => {
     } finally {
       setJoiningCampaignId(null);
     }
+  }
+
+  // Reset all filters
+  function resetFilters() {
+    setSearch("");
+    setSelectedLocation("All locations");
+    setSelectedCategory("All");
   }
 
   return (
@@ -342,11 +400,7 @@ useEffect(() => {
               </div>
 
               <button
-                onClick={() => {
-                  setSearch("");
-                  setSelectedLocation("All locations");
-                  setSelectedCategory("All");
-                }}
+                onClick={resetFilters}
                 className="flex items-center justify-center gap-2 rounded-xl bg-[#24364B] px-5 py-4 font-semibold text-white transition hover:bg-[#344F6B]"
               >
                 <Filter size={18} />
@@ -366,9 +420,11 @@ useEffect(() => {
               <p className="font-bold text-[#69ACD9]">
                 EXPLORE OPPORTUNITIES
               </p>
+
               <h2 className="mt-2 text-3xl font-extrabold sm:text-4xl">
-                Upcoming Campaigns
+                Volunteer Campaigns
               </h2>
+
               <p className="mt-3 text-slate-500">
                 Find a cause you care about and get involved.
               </p>
@@ -379,6 +435,39 @@ useEffect(() => {
                 ? "Loading campaigns..."
                 : `${filteredCampaigns.length} campaigns found`}
             </p>
+          </div>
+
+          {/* Upcoming and Previous Tabs */}
+          <div className="mt-8 flex gap-3 border-b border-slate-200">
+            <button
+              onClick={() => setActiveTab("Upcoming")}
+              className={`relative px-5 py-3 text-sm font-bold transition ${
+                activeTab === "Upcoming"
+                  ? "text-[#397EAD]"
+                  : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              Upcoming Campaigns
+
+              {activeTab === "Upcoming" && (
+                <span className="absolute bottom-0 left-0 h-1 w-full rounded-full bg-[#69ACD9]" />
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab("Previous")}
+              className={`relative px-5 py-3 text-sm font-bold transition ${
+                activeTab === "Previous"
+                  ? "text-[#397EAD]"
+                  : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              Previous Campaigns
+
+              {activeTab === "Previous" && (
+                <span className="absolute bottom-0 left-0 h-1 w-full rounded-full bg-[#69ACD9]" />
+              )}
+            </button>
           </div>
 
           {/* Category filters */}
@@ -418,6 +507,7 @@ useEffect(() => {
           {!loading && error && (
             <div className="mt-8 rounded-2xl border border-red-100 bg-red-50 px-6 py-12 text-center">
               <p className="font-semibold text-red-600">{error}</p>
+
               <button
                 onClick={fetchCampaigns}
                 className="mt-5 rounded-xl bg-[#24364B] px-5 py-3 font-semibold text-white hover:bg-[#344F6B]"
@@ -429,21 +519,27 @@ useEffect(() => {
 
           {/* Campaign cards */}
           {!loading && !error && filteredCampaigns.length > 0 && (
-            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-8 grid items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredCampaigns.map((campaign) => {
-                const isJoined = joinedCampaigns.includes(campaign.id);
-
-                const isFull =
-                  campaign.volunteers >= campaign.capacity;
-
-                const isJoining = joiningCampaignId === campaign.id;
+                const isPrevious =
+                  campaign.status?.toLowerCase() === "completed";
 
                 return (
                   <article
                     key={campaign.id}
-                    className="group flex flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+                    onClick={() => setSelectedCampaign(campaign)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedCampaign(campaign);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View details for ${campaign.title}`}
+                    className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#69ACD9]"
                   >
-                    <div className="relative overflow-hidden">
+                    <div className="relative shrink-0 overflow-hidden">
                       <img
                         src={campaign.image}
                         alt={campaign.title}
@@ -462,14 +558,21 @@ useEffect(() => {
                       >
                         {campaign.category}
                       </span>
+
+                      {isPrevious && (
+                        <span className="absolute right-4 top-4 rounded-full bg-slate-800/80 px-3 py-1.5 text-xs font-bold text-white">
+                          Completed
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-1 flex-col p-5 sm:p-6">
-                      <h3 className="text-xl font-bold">
+                      <h3 className="line-clamp-2 min-h-[3.5rem] text-xl font-bold">
                         {campaign.title}
                       </h3>
 
-                      <p className="mt-3 text-sm leading-6 text-slate-500">
+                      {/* Short description preview */}
+                      <p className="mt-3 line-clamp-2 min-h-[3rem] text-sm leading-6 text-slate-500">
                         {campaign.description}
                       </p>
 
@@ -480,14 +583,6 @@ useEffect(() => {
                             className="mt-0.5 shrink-0 text-[#69ACD9]"
                           />
                           {formatDate(campaign.date)}
-                        </p>
-
-                        <p className="flex items-start gap-2">
-                          <Clock
-                            size={18}
-                            className="mt-0.5 shrink-0 text-[#69ACD9]"
-                          />
-                          {formatTime(campaign.time)}
                         </p>
 
                         <p className="flex items-start gap-2">
@@ -507,6 +602,7 @@ useEffect(() => {
                         </p>
                       </div>
 
+                      {/* Progress bar */}
                       <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
                         <div
                           className="h-full rounded-full bg-[#8EC5E9]"
@@ -525,36 +621,17 @@ useEffect(() => {
                         />
                       </div>
 
-                      <button
-                        onClick={() => handleJoin(campaign)}
-                        disabled={
-                          isJoined ||
-                          isFull ||
-                          isJoining ||
-                          joiningCampaignId !== null
-                        }
-                        className={`mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-3 font-bold transition ${
-                          isJoined
-                            ? "cursor-not-allowed bg-green-100 text-green-700"
-                            : isJoining
-                              ? "cursor-wait bg-[#DDF0FC] text-[#397EAD]"
-                              : isFull
-                                ? "cursor-not-allowed bg-slate-100 text-slate-400"
-                                : "bg-[#EAF5FC] text-[#397EAD] hover:bg-[#B8DDF5]"
-                        }`}
-                      >
-                        {isJoined
-                          ? "Joined"
-                          : isJoining
-                            ? "Joining..."
-                            : isFull
-                              ? "Campaign Full"
-                              : "Join Campaign"}
+                      {/* View details */}
+                      <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-5 mt-5">
+                        <span className="text-sm font-bold text-[#397EAD]">
+                          View Details
+                        </span>
 
-                        {!isJoined && !isFull && !isJoining && (
-                          <ArrowRight size={17} />
-                        )}
-                      </button>
+                        <ArrowRight
+                          size={18}
+                          className="text-[#69ACD9] transition group-hover:translate-x-1"
+                        />
+                      </div>
                     </div>
                   </article>
                 );
@@ -566,18 +643,19 @@ useEffect(() => {
           {!loading && !error && filteredCampaigns.length === 0 && (
             <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
               <Search size={36} className="mx-auto text-slate-300" />
+
               <h3 className="mt-4 text-xl font-bold">
-                No campaigns found
+                {activeTab === "Upcoming"
+                  ? "No upcoming campaigns found"
+                  : "No previous campaigns found"}
               </h3>
+
               <p className="mt-2 text-slate-500">
                 Try another keyword, category, or location.
               </p>
+
               <button
-                onClick={() => {
-                  setSearch("");
-                  setSelectedLocation("All locations");
-                  setSelectedCategory("All");
-                }}
+                onClick={resetFilters}
                 className="mt-5 rounded-xl bg-[#8EC5E9] px-5 py-3 font-semibold text-[#183B55] hover:bg-[#75B5E0]"
               >
                 Clear filters
@@ -594,9 +672,11 @@ useEffect(() => {
                 <HeartHandshake size={21} />
                 BE PART OF THE CHANGE
               </div>
+
               <h2 className="mt-3 text-3xl font-extrabold">
                 Your community needs your kindness.
               </h2>
+
               <p className="mt-3 leading-7 text-slate-600">
                 Every hour, every idea, and every helping hand can make a
                 difference.
@@ -618,6 +698,226 @@ useEffect(() => {
         </section>
       </main>
 
+      {/* Campaign Details Popup Modal */}
+      {selectedCampaign && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedCampaign(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="campaign-modal-title"
+            className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setSelectedCampaign(null)}
+              aria-label="Close campaign details"
+              className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md transition hover:bg-white hover:text-red-500"
+            >
+              <X size={21} />
+            </button>
+
+            {/* Campaign image */}
+            <div className="relative">
+              <img
+                src={selectedCampaign.image}
+                alt={selectedCampaign.title}
+                className="h-56 w-full object-cover sm:h-72"
+              />
+
+              <span
+                className={`absolute bottom-4 left-5 rounded-full px-4 py-2 text-xs font-bold ${
+                  categoryColors[selectedCampaign.category] ||
+                  "bg-slate-100 text-slate-700"
+                }`}
+              >
+                {selectedCampaign.category}
+              </span>
+
+              {selectedCampaign.status?.toLowerCase() === "completed" && (
+                <span className="absolute bottom-4 right-5 rounded-full bg-slate-800/80 px-4 py-2 text-xs font-bold text-white">
+                  Completed
+                </span>
+              )}
+            </div>
+
+            {/* Campaign information */}
+            <div className="p-6 sm:p-8">
+              <h2
+                id="campaign-modal-title"
+                className="text-2xl font-extrabold text-[#24364B] sm:text-3xl"
+              >
+                {selectedCampaign.title}
+              </h2>
+
+              {/* Full description */}
+              <div className="mt-5">
+                <h3 className="text-sm font-bold uppercase tracking-wide text-[#69ACD9]">
+                  About This Campaign
+                </h3>
+
+                <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">
+                  {selectedCampaign.description || "No description available."}
+                </p>
+              </div>
+
+              {/* Campaign details */}
+              <div className="mt-7 grid gap-4 rounded-2xl bg-[#F7FAFD] p-5 sm:grid-cols-2">
+                <div className="flex items-start gap-3">
+                  <CalendarDays
+                    size={21}
+                    className="mt-1 shrink-0 text-[#69ACD9]"
+                  />
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      DATE
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[#24364B]">
+                      {formatDate(selectedCampaign.date)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Clock
+                    size={21}
+                    className="mt-1 shrink-0 text-[#69ACD9]"
+                  />
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      TIME
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[#24364B]">
+                      {formatTime(selectedCampaign.time) || "Not specified"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <MapPin
+                    size={21}
+                    className="mt-1 shrink-0 text-[#69ACD9]"
+                  />
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      LOCATION
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[#24364B]">
+                      {selectedCampaign.location}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Users
+                    size={21}
+                    className="mt-1 shrink-0 text-[#69ACD9]"
+                  />
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      VOLUNTEERS
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[#24364B]">
+                      {selectedCampaign.volunteers} / {selectedCampaign.capacity}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Volunteer progress */}
+              <div className="mt-6">
+                <div className="mb-2 flex justify-between text-sm">
+                  <span className="font-semibold text-slate-600">
+                    Volunteer Capacity
+                  </span>
+
+                  <span className="font-bold text-[#397EAD]">
+                    {selectedCampaign.capacity > 0
+                      ? Math.round(
+                          Math.min(
+                            (selectedCampaign.volunteers /
+                              selectedCampaign.capacity) *
+                              100,
+                            100
+                          )
+                        )
+                      : 0}%
+                  </span>
+                </div>
+
+                <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-[#8EC5E9] transition-all"
+                    style={{
+                      width: `${
+                        selectedCampaign.capacity > 0
+                          ? Math.min(
+                              (selectedCampaign.volunteers /
+                                selectedCampaign.capacity) *
+                                100,
+                              100
+                            )
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Join button only for upcoming campaigns */}
+              {selectedCampaign.status?.toLowerCase() === "upcoming" && (
+                <button
+                  onClick={() => handleJoin(selectedCampaign)}
+                  disabled={
+                    joinedCampaigns.includes(selectedCampaign.id) ||
+                    selectedCampaign.volunteers >= selectedCampaign.capacity ||
+                    joiningCampaignId !== null
+                  }
+                  className={`mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-4 font-bold transition ${
+                    joinedCampaigns.includes(selectedCampaign.id)
+                      ? "cursor-not-allowed bg-green-100 text-green-700"
+                      : joiningCampaignId === selectedCampaign.id
+                        ? "cursor-wait bg-[#DDF0FC] text-[#397EAD]"
+                        : selectedCampaign.volunteers >= selectedCampaign.capacity
+                          ? "cursor-not-allowed bg-slate-100 text-slate-400"
+                          : "bg-[#24364B] text-white hover:bg-[#344F6B]"
+                  }`}
+                >
+                  {joinedCampaigns.includes(selectedCampaign.id)
+                    ? "Already Joined"
+                    : joiningCampaignId === selectedCampaign.id
+                      ? "Joining..."
+                      : selectedCampaign.volunteers >= selectedCampaign.capacity
+                        ? "Campaign Full"
+                        : "Join Campaign"}
+
+                  {!joinedCampaigns.includes(selectedCampaign.id) &&
+                    joiningCampaignId !== selectedCampaign.id &&
+                    selectedCampaign.volunteers < selectedCampaign.capacity && (
+                      <ArrowRight size={18} />
+                    )}
+                </button>
+              )}
+
+              {/* Previous campaign message */}
+              {selectedCampaign.status?.toLowerCase() === "completed" && (
+                <div className="mt-8 flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-4 font-bold text-slate-500">
+                  <HeartHandshake size={20} />
+                  This campaign has been completed.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <footer className="border-t border-slate-100 bg-white px-5 py-8 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 sm:flex-row">
@@ -625,6 +925,7 @@ useEffect(() => {
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#DDF0FC] text-[#438FC4]">
               <HeartHandshake size={22} />
             </span>
+
             <span className="text-lg font-extrabold">
               Kindora<span className="text-[#69ACD9]">.</span>
             </span>
