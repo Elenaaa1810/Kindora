@@ -104,6 +104,7 @@ public function myCampaigns(Request $request)
                 'time' => $campaign->time,
                 'location' => $campaign->location,
                 'description' => $campaign->description,
+                'image_path' => $campaign->image_path,
                 'registration_status' => $registration->status,
                 'status' => 'Registered',
             ];
@@ -133,6 +134,7 @@ public function myCampaigns(Request $request)
                 'time' => $campaign->time,
                 'location' => $campaign->location,
                 'description' => $campaign->description,
+                'image_path' => $campaign->image_path,
                 'registration_status' => $registration->status,
                 'attendance_status' => 'present',
                 'status' => 'Completed',

@@ -18,6 +18,7 @@ import {
   CalendarPlus,
   Clock,
   RefreshCw,
+  MessageSquare,
 } from "lucide-react";
 
 const API_URL = "http://127.0.0.1:8000/api";
@@ -48,6 +49,11 @@ const navigation = [
     name: "Member Approvals",
     path: "/admin/approvals",
     icon: UserCheck,
+  },
+  {
+    name: "Community Posts",
+    path: "/admin/community-posts",
+    icon: MessageSquare,
   },
 ];
 
@@ -85,9 +91,11 @@ const formatNotificationDate = (date) => {
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+
   const [notificationsViewed, setNotificationsViewed] = useState(
-  localStorage.getItem("adminNotificationsViewed") === "true"
-);
+    localStorage.getItem("adminNotificationsViewed") === "true"
+  );
+
   const [notifications, setNotifications] = useState([]);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState("");
@@ -95,7 +103,10 @@ export default function AdminLayout() {
   const notificationRef = useRef(null);
   const navigate = useNavigate();
 
-  // Fetch notifications from Laravel
+  // ========================================
+  // FETCH ALL ADMIN NOTIFICATIONS
+  // ========================================
+
   const fetchNotifications = async () => {
     setNotificationLoading(true);
     setNotificationError("");
@@ -103,7 +114,11 @@ export default function AdminLayout() {
     try {
       const headers = getAdminHeaders();
 
-      const [memberResponse, registrationResponse] = await Promise.all([
+      const [
+        memberResponse,
+        registrationResponse,
+        postResponse,
+      ] = await Promise.all([
         fetch(`${API_URL}/admin/members`, {
           method: "GET",
           headers,
@@ -113,8 +128,14 @@ export default function AdminLayout() {
           method: "GET",
           headers,
         }),
+
+        fetch(`${API_URL}/admin/community-posts?status=pending`, {
+          method: "GET",
+          headers,
+        }),
       ]);
 
+      // Get member registration data
       const memberData = await memberResponse.json();
 
       if (!memberResponse.ok) {
@@ -123,6 +144,7 @@ export default function AdminLayout() {
         );
       }
 
+      // Get campaign registration data
       const registrationData = await registrationResponse.json();
 
       if (!registrationResponse.ok) {
@@ -132,24 +154,44 @@ export default function AdminLayout() {
         );
       }
 
+      // Get pending community posts
+      const postData = await postResponse.json();
+
+      if (!postResponse.ok) {
+        throw new Error(
+          postData.message || "Unable to load community posts."
+        );
+      }
+
       const members = getArrayData(memberData, "members");
+
       const registrations = getArrayData(
         registrationData,
         "registrations"
       );
 
-      // Member registration notifications
+      const pendingPosts = getArrayData(postData, "posts");
+
+      // ========================================
+      // MEMBER REGISTRATION NOTIFICATIONS
+      // ========================================
+
       const memberNotifications = members.map((member) => ({
         id: `member-${member.id}`,
         type: "member",
         title: "New Member Registration",
-        description: `${member.full_name || "A member"} registered for Kindora.`,
+        description: `${
+          member.full_name || member.name || "A member"
+        } registered for Kindora.`,
         date: member.created_at,
         icon: UserPlus,
         link: "/admin/approvals",
       }));
 
-      // Campaign registration notifications
+      // ========================================
+      // CAMPAIGN REGISTRATION NOTIFICATIONS
+      // ========================================
+
       const campaignNotifications = registrations.map((registration) => ({
         id: `campaign-${registration.id}`,
         type: "campaign",
@@ -168,18 +210,44 @@ export default function AdminLayout() {
         link: "/admin/attendance",
       }));
 
-      // Combine and sort newest first
+      // ========================================
+      // COMMUNITY POST NOTIFICATIONS
+      // ========================================
+
+      const postNotifications = pendingPosts.map((post) => ({
+        id: `post-${post.id}`,
+        type: "post",
+        title: "New Post Waiting for Approval",
+        description: `${
+          post.member_name ||
+          post.member?.full_name ||
+          post.member?.name ||
+          "A member"
+        } submitted a new community post.`,
+        date: post.created_at,
+        icon: MessageSquare,
+        link: "/admin/community-posts",
+      }));
+
+      // ========================================
+      // COMBINE AND SORT NOTIFICATIONS
+      // ========================================
+
       const combinedNotifications = [
         ...memberNotifications,
         ...campaignNotifications,
+        ...postNotifications,
       ]
         .filter((item) => item.date)
         .sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          (a, b) =>
+            new Date(b.date).getTime() -
+            new Date(a.date).getTime()
         )
         .slice(0, 10);
 
       setNotifications(combinedNotifications);
+
     } catch (error) {
       console.error("Notification error:", error);
       setNotificationError(error.message);
@@ -188,7 +256,10 @@ export default function AdminLayout() {
     }
   };
 
-  // Load notifications and refresh every 30 seconds
+  // ========================================
+  // LOAD NOTIFICATIONS EVERY 30 SECONDS
+  // ========================================
+
   useEffect(() => {
     fetchNotifications();
 
@@ -199,7 +270,10 @@ export default function AdminLayout() {
     return () => clearInterval(interval);
   }, []);
 
-  // Close dropdown when clicking outside
+  // ========================================
+  // CLOSE DROPDOWN WHEN CLICKING OUTSIDE
+  // ========================================
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -217,7 +291,10 @@ export default function AdminLayout() {
     };
   }, []);
 
-  // Admin logout
+  // ========================================
+  // ADMIN LOGOUT
+  // ========================================
+
   const handleLogout = async () => {
     const token = localStorage.getItem("adminToken");
 
@@ -238,29 +315,39 @@ export default function AdminLayout() {
     }
   };
 
-  // Click notification
+  // ========================================
+  // CLICK NOTIFICATION
+  // ========================================
+
   const handleNotificationClick = (notification) => {
     setNotificationOpen(false);
     navigate(notification.link);
   };
 
-  // Click notification bell
- const handleBellClick = () => {
-  const willOpen = !notificationOpen;
+  // ========================================
+  // CLICK NOTIFICATION BELL
+  // ========================================
 
-  setNotificationOpen(willOpen);
+  const handleBellClick = () => {
+    const willOpen = !notificationOpen;
 
-  if (willOpen) {
-    // Remember that admin has viewed notifications
-    setNotificationsViewed(true);
-    localStorage.setItem("adminNotificationsViewed", "true");
+    setNotificationOpen(willOpen);
 
-    fetchNotifications();
-  }
-};
+    if (willOpen) {
+      setNotificationsViewed(true);
+      localStorage.setItem("adminNotificationsViewed", "true");
+
+      fetchNotifications();
+    }
+  };
+
+  // ========================================
+  // MAIN LAYOUT
+  // ========================================
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -275,6 +362,7 @@ export default function AdminLayout() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
+
         {/* Logo */}
         <div className="flex h-20 items-center justify-between border-b border-slate-100 px-6">
           <NavLink
@@ -290,6 +378,7 @@ export default function AdminLayout() {
               <h1 className="text-lg font-bold tracking-tight text-slate-800">
                 Kindora.
               </h1>
+
               <p className="text-xs text-slate-400">
                 Volunteer Admin
               </p>
@@ -315,6 +404,7 @@ export default function AdminLayout() {
             <p className="truncate text-sm font-semibold text-slate-800">
               Administrator
             </p>
+
             <p className="text-xs text-slate-500">
               System Admin
             </p>
@@ -349,6 +439,7 @@ export default function AdminLayout() {
                 {({ isActive }) => (
                   <>
                     <Icon size={20} />
+
                     <span className="flex-1">{item.name}</span>
 
                     {isActive && <ChevronRight size={17} />}
@@ -377,8 +468,10 @@ export default function AdminLayout() {
 
       {/* Main content */}
       <div className="min-h-screen lg:pl-72">
+
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-100 bg-white/90 px-4 backdrop-blur-md sm:px-8">
+
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -392,6 +485,7 @@ export default function AdminLayout() {
               <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
                 Admin Panel
               </h2>
+
               <p className="hidden text-xs text-slate-400 sm:block">
                 Manage your volunteering community
               </p>
@@ -399,6 +493,7 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-5">
+
             {/* Notification bell and dropdown */}
             <div className="relative" ref={notificationRef}>
               <button
@@ -409,7 +504,6 @@ export default function AdminLayout() {
               >
                 <Bell size={21} />
 
-                {/* Hide number after bell is clicked */}
                 {/* Red notification dot */}
                 {notifications.length > 0 && !notificationsViewed && (
                   <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
@@ -419,14 +513,16 @@ export default function AdminLayout() {
               {/* Notification dropdown */}
               {notificationOpen && (
                 <div className="absolute right-0 top-14 z-50 w-[340px] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl sm:w-[390px]">
+
                   {/* Dropdown header */}
                   <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
                     <div>
                       <h3 className="font-bold text-slate-800">
                         Notifications
                       </h3>
+
                       <p className="mt-1 text-xs text-slate-400">
-                        Recent registrations
+                        Recent registrations and community posts
                       </p>
                     </div>
 
@@ -447,12 +543,14 @@ export default function AdminLayout() {
 
                   {/* Notification list */}
                   <div className="max-h-[400px] overflow-y-auto">
+
                     {notificationLoading && notifications.length === 0 ? (
                       <div className="py-10 text-center">
                         <RefreshCw
                           size={22}
                           className="mx-auto animate-spin text-sky-500"
                         />
+
                         <p className="mt-3 text-sm text-slate-400">
                           Loading notifications...
                         </p>
@@ -482,7 +580,7 @@ export default function AdminLayout() {
                         </p>
 
                         <p className="mt-1 text-xs text-slate-400">
-                          New registrations will appear here.
+                          New registrations and posts will appear here.
                         </p>
                       </div>
                     ) : (
@@ -501,7 +599,9 @@ export default function AdminLayout() {
                               className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                                 notification.type === "member"
                                   ? "bg-blue-100 text-blue-600"
-                                  : "bg-purple-100 text-purple-600"
+                                  : notification.type === "post"
+                                    ? "bg-amber-100 text-amber-600"
+                                    : "bg-purple-100 text-purple-600"
                               }`}
                             >
                               <Icon size={19} />
@@ -532,9 +632,10 @@ export default function AdminLayout() {
                     )}
                   </div>
 
+                  {/* Dropdown footer */}
                   <div className="border-t border-slate-100 bg-slate-50 px-5 py-3">
                     <p className="text-center text-xs text-slate-400">
-                      Showing the 10 most recent registrations
+                      Showing the 10 most recent notifications
                     </p>
                   </div>
                 </div>
@@ -552,6 +653,7 @@ export default function AdminLayout() {
                 <p className="text-sm font-semibold text-slate-700">
                   Admin
                 </p>
+
                 <p className="text-xs text-slate-400">
                   Administrator
                 </p>

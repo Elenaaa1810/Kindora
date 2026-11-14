@@ -1,4 +1,3 @@
-
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -10,6 +9,7 @@ import AboutUs from "./UI/member/aboutus.jsx";
 import Register from "./UI/member/register.jsx";
 import Login from "./UI/member/login.jsx";
 import UserProfile from "./UI/member/userprofile.jsx";
+
 import ProtectedAdminRoute from "./UI/admin/ProtectedAdminRoute.jsx";
 import AdminLogin from "./UI/admin/AdminLogin.jsx";
 import AdminLayout from "./UI/admin/AdminLayout.jsx";
@@ -18,6 +18,7 @@ import CampaignManagement from "./UI/admin/CampaignManagement.jsx";
 import AttendanceManagement from "./UI/admin/AttendanceManagement.jsx";
 import ManageUsers from "./UI/admin/ManageUsers.jsx";
 import AdminApprovals from "./UI/admin/AdminApprovals.jsx";
+import CommunityPostManagement from "./UI/admin/CommunityPostManagement.jsx";
 
 import "./index.css";
 
@@ -35,19 +36,20 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                 <Route path="/register" element={<Register />} />
                 <Route path="/userprofile" element={<UserProfile />} />
 
-                {/* Admin login - accessible without logging in */}
+                {/* Admin login */}
                 <Route path="/admin/login" element={<AdminLogin />} />
 
-                {/* All other admin pages require login */}
+                {/* Protected admin pages */}
                 <Route element={<ProtectedAdminRoute />}>
-                  <Route path="/admin" element={<AdminLayout />}>
-                    <Route index element={<AdminDashboard />} />
-                    <Route path="dashboard" element={<AdminDashboard />} />
-                    <Route path="campaigns" element={<CampaignManagement />} />
-                    <Route path="attendance" element={<AttendanceManagement />} />
-                    <Route path="users" element={<ManageUsers />} />
-                    <Route path="approvals" element={<AdminApprovals />} />
-                  </Route>
+                    <Route path="/admin" element={<AdminLayout />}>
+                        <Route index element={<AdminDashboard />} />
+                        <Route path="dashboard" element={<AdminDashboard />} />
+                        <Route path="campaigns" element={<CampaignManagement />} />
+                        <Route path="attendance" element={<AttendanceManagement />} />
+                        <Route path="users" element={<ManageUsers />} />
+                        <Route path="approvals" element={<AdminApprovals />} />
+                        <Route path="community-posts" element={<CommunityPostManagement />} />
+                    </Route>
                 </Route>
 
             </Routes>

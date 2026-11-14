@@ -47,4 +47,27 @@ public function campaignRegistrations()
         'member_id'
     );
 }
+// Community posts created by this member
+public function communityPosts()
+{
+    return $this->hasMany(CommunityPost::class);
+}
+
+// Likes made by this member
+public function communityLikes()
+{
+    return $this->hasMany(CommunityPostLike::class);
+}
+
+// Posts saved by this member
+public function communitySaves()
+{
+    return $this->hasMany(CommunityPostSave::class);
+}
+
+// Comments written by this member
+public function communityComments()
+{
+    return $this->hasMany(CommunityComment::class);
+}
 }
