@@ -28,7 +28,10 @@ class CommunityPost extends Model
     {
         return $this->hasMany(CommunityPostLike::class, 'post_id');
     }
-
+public function shares()
+{
+    return $this->hasMany(CommunityPostShare::class, 'post_id');
+}
     // Members who saved this post
     public function saves()
     {

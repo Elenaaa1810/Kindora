@@ -9,6 +9,7 @@ import AboutUs from "./UI/member/aboutus.jsx";
 import Register from "./UI/member/register.jsx";
 import Login from "./UI/member/login.jsx";
 import UserProfile from "./UI/member/userprofile.jsx";
+import MyForum from "./UI/member/myforum.jsx";
 
 import ProtectedAdminRoute from "./UI/admin/ProtectedAdminRoute.jsx";
 import AdminLogin from "./UI/admin/AdminLogin.jsx";
@@ -35,6 +36,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/userprofile" element={<UserProfile />} />
+                <Route path="/myforum" element={<MyForum />} />
 
                 {/* Admin login */}
                 <Route path="/admin/login" element={<AdminLogin />} />

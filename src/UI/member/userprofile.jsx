@@ -10,6 +10,7 @@ import {
   MapPin,
   CalendarDays,
   Award,
+  ArrowRight,
   Users,
   Settings,
   Pencil,
@@ -17,6 +18,8 @@ import {
   Clock3,
   LogOut,
   X,
+  MessageCircle,
+  Share2,
 } from "lucide-react";
 
 function UserProfile() {
@@ -59,9 +62,8 @@ function UserProfile() {
   const [completedCampaigns, setCompletedCampaigns] = useState([]);
   const [campaignLoading, setCampaignLoading] = useState(true);
   const [campaignError, setCampaignError] = useState("");
-
-  const [joinedVisibleCount, setJoinedVisibleCount] = useState(5);
-  const [completedVisibleCount, setCompletedVisibleCount] = useState(5);
+  const [expandedCampaignSection, setExpandedCampaignSection] =
+    useState(null);
 
   // AUTHENTICATION
   const getToken = () => {
@@ -70,6 +72,12 @@ function UserProfile() {
       sessionStorage.getItem("memberToken")
     );
   };
+
+  // COMMON API HEADERS
+  const getAuthHeaders = () => ({
+    Accept: "application/json",
+    Authorization: `Bearer ${getToken()}`,
+  });
 
   // FETCH PROFILE
   const fetchProfile = async () => {
@@ -132,10 +140,7 @@ function UserProfile() {
       }
 
       const response = await fetch(`${API_URL}/my-campaigns`, {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
       });
 
       const data = await response.json();
@@ -334,8 +339,8 @@ function UserProfile() {
     const imageUrl = getCampaignImage(campaign);
 
     return (
-      <article className="flex flex-col gap-4 rounded-2xl border border-[#E4EFF7] bg-white p-4 transition hover:shadow-md sm:flex-row sm:items-center">
-        <div className="h-32 w-full shrink-0 overflow-hidden rounded-xl bg-[#EAF5FC] sm:h-24 sm:w-32">
+      <article className="flex w-[285px] shrink-0 flex-col overflow-hidden rounded-2xl border border-[#E4EFF7] bg-white transition hover:-translate-y-1 hover:shadow-md sm:w-[320px]">
+        <div className="h-40 w-full overflow-hidden bg-[#EAF5FC]">
           {imageUrl ? (
             <img
               src={imageUrl}
@@ -347,14 +352,14 @@ function UserProfile() {
             />
           ) : (
             <div className="flex h-full items-center justify-center text-[#438FC4]">
-              {completed ? <Award size={35} /> : <Users size={35} />}
+              {completed ? <Award size={42} /> : <Users size={42} />}
             </div>
           )}
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="flex flex-1 flex-col p-4">
           <span
-            className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${
+            className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
               completed
                 ? "bg-green-50 text-green-700"
                 : "bg-blue-50 text-blue-700"
@@ -363,40 +368,42 @@ function UserProfile() {
             {campaign.category || "Volunteer Campaign"}
           </span>
 
-          <h3 className="mt-2 font-bold text-[#24364B]">
+          <h3 className="mt-3 line-clamp-2 min-h-12 font-bold text-[#24364B]">
             {campaign.title || "Untitled Campaign"}
           </h3>
 
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <CalendarDays size={14} />
+          <div className="mt-3 space-y-2 text-xs text-slate-500">
+            <span className="flex items-center gap-2">
+              <CalendarDays size={14} className="shrink-0" />
               {formatDate(campaign.date)}
             </span>
 
-            <span className="flex items-center gap-1.5">
-              <MapPin size={14} />
-              {campaign.location || "Location unavailable"}
+            <span className="flex items-center gap-2">
+              <MapPin size={14} className="shrink-0" />
+              <span className="truncate">
+                {campaign.location || "Location unavailable"}
+              </span>
             </span>
           </div>
 
           {!completed && (
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-3 text-xs text-slate-400">
               Registration: {campaign.registration_status || "Registered"}
             </p>
           )}
-        </div>
 
-        <div className="shrink-0">
-          <span
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ${
-              completed
-                ? "bg-green-100 text-green-700"
-                : "bg-blue-100 text-blue-700"
-            }`}
-          >
-            {completed && <CheckCircle size={14} />}
-            {completed ? "Completed" : "Registered"}
-          </span>
+          <div className="mt-auto pt-4">
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ${
+                completed
+                  ? "bg-green-100 text-green-700"
+                  : "bg-blue-100 text-blue-700"
+              }`}
+            >
+              {completed && <CheckCircle size={14} />}
+              {completed ? "Completed" : "Registered"}
+            </span>
+          </div>
         </div>
       </article>
     );
@@ -532,96 +539,38 @@ function UserProfile() {
                 </div>
               </section>
 
-              {/* EDIT PROFILE MODAL */}
-              {isEditing && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4">
-                  <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-xl sm:p-8">
-                    <div className="mb-6 flex items-center justify-between">
+              {/* MY FORUM */}
+              <section className="mt-8">
+                <div className="rounded-2xl border border-[#E4EFF7] bg-white p-6 shadow-sm sm:p-8">
+                  <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#DDF0FC] text-[#438FC4]">
+                        <MessageCircle size={24} />
+                        
+                      </div>
+
                       <div>
-                        <h2 className="text-2xl font-extrabold text-[#24364B]">
-                          Edit Profile
+                        <h2 className="text-xl font-extrabold text-[#24364B]">
+                          My Forum
                         </h2>
 
-                        <p className="mt-1 text-sm text-slate-500">
-                          Update your personal information.
+                        <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
+                          View your own volunteering posts and the community
+                          posts you have shared to your personal profile.
                         </p>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsEditing(false);
-                          setEditForm(user);
-                        }}
-                        disabled={saving}
-                        className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-                      >
-                        <X size={22} />
-                      </button>
                     </div>
 
-                    <div className="space-y-4">
-                      {[
-                        ["Full Name", "name"],
-                        ["Email Address", "email"],
-                        ["Phone Number", "phone"],
-                        ["Location", "location"],
-                      ].map(([label, field]) => (
-                        <div key={field}>
-                          <label className="mb-2 block text-sm font-semibold text-[#24364B]">
-                            {label}
-                          </label>
-
-                          <input
-                            type={field === "email" ? "email" : "text"}
-                            name={field}
-                            value={editForm[field]}
-                            onChange={handleInputChange}
-                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#69ACD9] focus:ring-2 focus:ring-[#DDF0FC]"
-                          />
-                        </div>
-                      ))}
-
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-[#24364B]">
-                          About Me
-                        </label>
-
-                        <textarea
-                          name="bio"
-                          value={editForm.bio}
-                          onChange={handleInputChange}
-                          rows="3"
-                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#69ACD9] focus:ring-2 focus:ring-[#DDF0FC]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-6 flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsEditing(false);
-                          setEditForm(user);
-                        }}
-                        disabled={saving}
-                        className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="flex-1 rounded-xl bg-[#438FC4] py-3 text-sm font-bold text-white hover:bg-[#397EAD] disabled:opacity-50"
-                      >
-                        {saving ? "Saving..." : "Save Changes"}
-                      </button>
-                    </div>
+                    <Link
+                      to="/myforum"
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#397EAD]"
+                    >
+                      Visit My Forum
+                      <ArrowRight size={17} />
+                    </Link>
                   </div>
                 </div>
-              )}
+              </section>
 
               {/* VOLUNTEER STATISTICS */}
               <section className="mt-8">
@@ -655,7 +604,9 @@ function UserProfile() {
                             </p>
 
                             {stat.label === "Campaigns Completed" && (
-                              <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${achievement.color}`}>
+                              <span
+                                className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${achievement.color}`}
+                              >
                                 {achievement.name}
                               </span>
                             )}
@@ -702,152 +653,246 @@ function UserProfile() {
                   </div>
                 ) : (
                   <>
-                    {/* JOINED CAMPAIGNS */}
-                    <div className="mb-10">
-                      <div className="mb-5 flex items-center gap-2">
-                        <Users className="text-[#438FC4]" size={22} />
-
-                        <h3 className="text-lg font-bold text-[#24364B]">
-                          Joined Campaigns
-                        </h3>
-
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
-                          {joinedCampaigns.length}
-                        </span>
-                      </div>
-
-                      {joinedCampaigns.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-                          <Users className="mx-auto mb-3 text-slate-300" size={35} />
-
-                          <p className="font-semibold text-slate-600">
-                            No joined campaigns yet.
-                          </p>
-
-                          <p className="mt-2 text-sm text-slate-400">
-                            Explore campaigns and start volunteering!
-                          </p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="space-y-3">
-                            {joinedCampaigns
-                              .slice(0, joinedVisibleCount)
-                              .map((campaign) => (
-                                <CampaignCard
-                                  key={campaign.registration_id}
-                                  campaign={campaign}
-                                />
-                              ))}
+                    {/* CAMPAIGN SUMMARY CARDS */}
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      {/* REGISTERED CAMPAIGNS */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedCampaignSection(
+                            expandedCampaignSection === "registered"
+                              ? null
+                              : "registered"
+                          )
+                        }
+                        aria-expanded={
+                          expandedCampaignSection === "registered"
+                        }
+                        className={`group rounded-2xl border p-6 text-left transition duration-200 ${
+                          expandedCampaignSection === "registered"
+                            ? "border-[#438FC4] bg-[#EAF5FC] shadow-md"
+                            : "border-[#E4EFF7] bg-white hover:border-[#8EC5E9] hover:shadow-md"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#DDF0FC] text-[#438FC4]">
+                            <Users size={24} />
                           </div>
 
-                          {joinedCampaigns.length > 5 && (
-                            <div className="mt-5 flex justify-center">
-                              {joinedVisibleCount < joinedCampaigns.length ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setJoinedVisibleCount((prev) =>
-                                      Math.min(prev + 5, joinedCampaigns.length)
-                                    )
-                                  }
-                                  className="rounded-xl border border-[#8EC5E9] bg-white px-6 py-2.5 text-sm font-bold text-[#438FC4] hover:bg-[#EAF5FC]"
-                                >
-                                  Show More (
-                                  {Math.min(
-                                    5,
-                                    joinedCampaigns.length - joinedVisibleCount
-                                  )}{" "}
-                                  more)
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setJoinedVisibleCount(5)}
-                                  className="rounded-xl border border-[#8EC5E9] bg-white px-6 py-2.5 text-sm font-bold text-[#438FC4] hover:bg-[#EAF5FC]"
-                                >
-                                  Show Less
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    {/* COMPLETED CAMPAIGNS */}
-                    <div>
-                      <div className="mb-5 flex items-center gap-2">
-                        <CheckCircle className="text-green-600" size={22} />
-
-                        <h3 className="text-lg font-bold text-[#24364B]">
-                          Completed Campaigns
-                        </h3>
-
-                        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
-                          {completedCampaigns.length}
-                        </span>
-                      </div>
-
-                      {completedCampaigns.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-                          <Award className="mx-auto mb-3 text-slate-300" size={35} />
-
-                          <p className="font-semibold text-slate-600">
-                            No completed campaigns yet.
-                          </p>
-
-                          <p className="mt-2 text-sm text-slate-400">
-                            Your completed activities will appear here after attendance is verified.
-                          </p>
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+                            {joinedCampaigns.length} Campaigns
+                          </span>
                         </div>
-                      ) : (
-                        <>
-                          <div className="space-y-3">
-                            {completedCampaigns
-                              .slice(0, completedVisibleCount)
-                              .map((campaign) => (
-                                <CampaignCard
-                                  key={campaign.registration_id}
-                                  campaign={campaign}
-                                  completed={true}
-                                />
-                              ))}
+
+                        <div className="mt-5 flex items-end justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-extrabold text-[#24364B]">
+                              Registered Campaigns
+                            </h3>
+
+                            <p className="mt-2 text-sm text-slate-500">
+                              View the campaigns you have registered for.
+                            </p>
                           </div>
 
-                          {completedCampaigns.length > 5 && (
-                            <div className="mt-5 flex justify-center">
-                              {completedVisibleCount < completedCampaigns.length ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setCompletedVisibleCount((prev) =>
-                                      Math.min(prev + 5, completedCampaigns.length)
-                                    )
-                                  }
-                                  className="rounded-xl border border-green-200 bg-white px-6 py-2.5 text-sm font-bold text-green-700 hover:bg-green-50"
-                                >
-                                  Show More (
-                                  {Math.min(
-                                    5,
-                                    completedCampaigns.length - completedVisibleCount
-                                  )}{" "}
-                                  more)
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setCompletedVisibleCount(5)}
-                                  className="rounded-xl border border-green-200 bg-white px-6 py-2.5 text-sm font-bold text-green-700 hover:bg-green-50"
-                                >
-                                  Show Less
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
+                          <span
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${
+                              expandedCampaignSection === "registered"
+                                ? "rotate-180 bg-[#438FC4] text-white"
+                                : "bg-[#EAF5FC] text-[#438FC4]"
+                            }`}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="m6 9 6 6 6-6" />
+                            </svg>
+                          </span>
+                        </div>
+
+                        <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-blue-100">
+                          <div className="h-full w-full rounded-full bg-[#438FC4]" />
+                        </div>
+                      </button>
+
+                      {/* COMPLETED CAMPAIGNS */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedCampaignSection(
+                            expandedCampaignSection === "completed"
+                              ? null
+                              : "completed"
+                          )
+                        }
+                        aria-expanded={
+                          expandedCampaignSection === "completed"
+                        }
+                        className={`group rounded-2xl border p-6 text-left transition duration-200 ${
+                          expandedCampaignSection === "completed"
+                            ? "border-green-500 bg-green-50 shadow-md"
+                            : "border-[#E4EFF7] bg-white hover:border-green-300 hover:shadow-md"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100 text-green-600">
+                            <Award size={24} />
+                          </div>
+
+                          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+                            {completedCampaigns.length} Campaigns
+                          </span>
+                        </div>
+
+                        <div className="mt-5 flex items-end justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-extrabold text-[#24364B]">
+                              Completed Campaigns
+                            </h3>
+
+                            <p className="mt-2 text-sm text-slate-500">
+                              View the volunteer activities you have completed.
+                            </p>
+                          </div>
+
+                          <span
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${
+                              expandedCampaignSection === "completed"
+                                ? "rotate-180 bg-green-600 text-white"
+                                : "bg-green-100 text-green-600"
+                            }`}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="m6 9 6 6 6-6" />
+                            </svg>
+                          </span>
+                        </div>
+
+                        <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-green-100">
+                          <div className="h-full w-full rounded-full bg-green-500" />
+                        </div>
+                      </button>
                     </div>
+
+                    {/* REGISTERED CAMPAIGN LIST */}
+                    {expandedCampaignSection === "registered" && (
+                      <div className="mt-6 rounded-2xl border border-[#E4EFF7] bg-white p-5 shadow-sm sm:p-6">
+                        <div className="mb-5 flex items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-extrabold text-[#24364B]">
+                              Registered Campaigns
+                            </h3>
+
+                            <p className="mt-1 text-sm text-slate-500">
+                              Your upcoming volunteer activities.
+                            </p>
+                          </div>
+
+                          <span className="rounded-full bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-700">
+                            {joinedCampaigns.length}
+                          </span>
+                        </div>
+
+                        {joinedCampaigns.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-[#F7FAFD] p-8 text-center">
+                            <Users
+                              className="mx-auto mb-3 text-slate-300"
+                              size={35}
+                            />
+
+                            <p className="font-semibold text-slate-600">
+                              No registered campaigns yet.
+                            </p>
+
+                            <p className="mt-2 text-sm text-slate-400">
+                              Explore campaigns and start volunteering!
+                            </p>
+
+                            <Link
+                              to="/campaigns"
+                              className="mt-4 inline-flex rounded-xl bg-[#438FC4] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#397EAD]"
+                            >
+                              Explore Campaigns
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="flex gap-5 overflow-x-auto pb-4">
+                            {joinedCampaigns.map((campaign) => (
+                              <CampaignCard
+                                key={campaign.registration_id || campaign.id}
+                                campaign={campaign}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* COMPLETED CAMPAIGN LIST */}
+                    {expandedCampaignSection === "completed" && (
+                      <div className="mt-6 rounded-2xl border border-green-100 bg-white p-5 shadow-sm sm:p-6">
+                        <div className="mb-5 flex items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-extrabold text-[#24364B]">
+                              Completed Campaigns
+                            </h3>
+
+                            <p className="mt-1 text-sm text-slate-500">
+                              Your verified volunteer achievements.
+                            </p>
+                          </div>
+
+                          <span className="rounded-full bg-green-100 px-3 py-1.5 text-xs font-bold text-green-700">
+                            {completedCampaigns.length}
+                          </span>
+                        </div>
+
+                        {completedCampaigns.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-[#F7FAFD] p-8 text-center">
+                            <Award
+                              className="mx-auto mb-3 text-slate-300"
+                              size={35}
+                            />
+
+                            <p className="font-semibold text-slate-600">
+                              No completed campaigns yet.
+                            </p>
+
+                            <p className="mt-2 text-sm text-slate-400">
+                              Your completed activities will appear here after attendance is verified.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex gap-5 overflow-x-auto pb-4">
+                            {completedCampaigns.map((campaign) => (
+                              <CampaignCard
+                                key={campaign.registration_id || campaign.id}
+                                campaign={campaign}
+                                completed={true}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </section>

@@ -125,6 +125,9 @@ export default function Community() {
   const [replyingTo, setReplyingTo] = useState(null);
   const [savingPost, setSavingPost] = useState(null);
 
+  // SHARE LOADING STATE
+  const [sharingPost, setSharingPost] = useState(null);
+
   // CHECK MEMBER LOGIN AND APPROVAL STATUS
   async function checkMemberStatus() {
     const token = getToken();
@@ -477,15 +480,51 @@ export default function Community() {
     }
   }
 
-  // SHARE POST
+  // SHARE POST TO MEMBER'S PROFILE
   async function sharePost(post) {
-    const text = `${post.activity}: ${post.description}`;
+    if (!isLoggedIn) {
+      setNotice("Please log in to share community posts.");
+      return;
+    }
+
+    if (!canSharePost) {
+      setNotice("Only approved members can share community posts.");
+      return;
+    }
+
+    if (post.is_shared) {
+      setNotice("You have already shared this post.");
+      return;
+    }
 
     try {
-      await navigator.clipboard.writeText(text);
-      setNotice("Post text copied to clipboard!");
-    } catch {
-      setNotice(text);
+      setSharingPost(post.id);
+      setNotice("");
+
+      const data = await apiRequest(
+        `${API_BASE}/community/posts/${post.id}/share`,
+        {
+          method: "POST",
+        }
+      );
+
+      setPosts((previous) =>
+        previous.map((item) =>
+          item.id === post.id
+            ? {
+                ...item,
+                is_shared: data.is_shared,
+                shares_count: data.shares_count,
+              }
+            : item
+        )
+      );
+
+      setNotice(data.message || "Post added to your profile.");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setSharingPost(null);
     }
   }
 
@@ -494,36 +533,39 @@ export default function Community() {
       <Header />
 
       <main>
-        {/* COMMUNITY HERO */}
-        <section className="bg-[#EAF5FC] px-5 py-14 sm:py-20 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#438FC4] shadow-sm">
-                <Sparkles size={16} />
-                Every act of kindness matters
-              </div>
+    
 
-              <h1 className="mt-6 font-['Poppins'] text-4xl font-extrabold leading-tight sm:text-5xl lg:text-6xl">
-                A Community That
-                <span className="block text-[#69ACD9]">
-                  Inspires Change.
-                </span>
-              </h1>
+        {/* MY FORUM SHORTCUT */}
+<section className="bg-white px-5 py-6 lg:px-8">
+  <div className="mx-auto max-w-7xl">
+    <div className="flex flex-col justify-between gap-5 rounded-2xl border border-[#DDF0FC] bg-[#F7FAFD] p-6 sm:flex-row sm:items-center sm:p-7">
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#DDF0FC] text-[#438FC4]">
+          <Users size={24} />
+        </div>
 
-              <p className="mt-5 max-w-2xl font-['Inter'] text-base leading-8 text-slate-600 sm:text-lg">
-                Connect with volunteers, celebrate meaningful experiences,
-                share your activities, and inspire others to make a difference.
-              </p>
+        <div>
+          <h2 className="text-xl font-extrabold text-[#24364B]">
+            My Forum
+          </h2>
 
-              <a
-                href="#share-experience"
-                className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#8EC5E9] px-6 py-4 font-bold text-[#183B55] transition hover:bg-[#75B5E0]"
-              >
-                Share Your Experience <ArrowRight size={19} />
-              </a>
-            </div>
-          </div>
-        </section>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
+            Visit your personal forum to see the posts you've created
+            and the community posts you've shared.
+          </p>
+        </div>
+      </div>
+
+      <a
+        href="/myforum"
+        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#397EAD]"
+      >
+        Visit My Forum
+        <ArrowRight size={17} />
+      </a>
+    </div>
+  </div>
+</section>
 
         {/* COMMUNITY FEED */}
         <section className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
@@ -875,12 +917,40 @@ export default function Community() {
                             <span className="hidden sm:inline">Save</span>
                           </button>
 
+                          {/* SHARE TO PROFILE */}
                           <button
                             onClick={() => sharePost(post)}
-                            className="flex items-center justify-center gap-1 rounded-lg py-3 text-sm font-semibold text-slate-500 transition hover:bg-[#F7FAFD]"
+                            disabled={
+                              sharingPost === post.id ||
+                              post.is_shared ||
+                              !canSharePost
+                            }
+                            title={
+                              !isLoggedIn
+                                ? "Log in to share this post"
+                                : !canSharePost
+                                ? "Only approved members can share posts"
+                                : post.is_shared
+                                ? "Already shared to your profile"
+                                : "Share to your profile"
+                            }
+                            className={`flex items-center justify-center gap-1 rounded-lg py-3 text-sm font-semibold transition hover:bg-[#F7FAFD] disabled:cursor-not-allowed disabled:opacity-60 ${
+                              post.is_shared
+                                ? "text-[#438FC4]"
+                                : "text-slate-500"
+                            }`}
                           >
-                            <Share2 size={18} />
-                            <span className="hidden sm:inline">Share</span>
+                            <Share2
+                              size={18}
+                              fill={post.is_shared ? "currentColor" : "none"}
+                            />
+                            <span className="hidden sm:inline">
+                              {sharingPost === post.id
+                                ? "Sharing..."
+                                : post.is_shared
+                                ? "Shared"
+                                : "Share"}
+                            </span>
                           </button>
                         </div>
 

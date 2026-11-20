@@ -1,4 +1,3 @@
-
 <?php
 
 use Illuminate\Support\Facades\Route;
@@ -161,6 +160,21 @@ Route::middleware('auth:sanctum')->group(function () {
         CommunityController::class,
         'myPosts'
     ]);
+    // Community post sharing
+Route::post(
+    '/community/posts/{postId}/share',
+    [CommunityController::class, 'sharePost']
+);
+
+Route::delete(
+    '/community/posts/{postId}/share',
+    [CommunityController::class, 'removeShare']
+);
+
+Route::get(
+    '/community/shared-posts',
+    [CommunityController::class, 'sharedPosts']
+);
 
 });
 
