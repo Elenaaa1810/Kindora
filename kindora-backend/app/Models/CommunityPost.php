@@ -38,10 +38,10 @@ public function shares()
         return $this->hasMany(CommunityPostSave::class, 'post_id');
     }
 
-    // Comments belonging to this post
+
+    // comments and replies to this post
     public function comments()
     {
-        return $this->hasMany(CommunityComment::class, 'post_id')
-            ->whereNull('parent_comment_id');
+        return $this->hasMany(CommunityComment::class, 'post_id');
     }
 }

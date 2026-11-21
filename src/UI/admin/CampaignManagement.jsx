@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
@@ -246,7 +245,8 @@ export default function CampaignManagement() {
       const formData = createCampaignFormData(campaignData);
 
       if (editingId !== null) {
-        // Update existing campaign using Laravel method spoofing
+        // Update existing campaign
+        // Laravel uses method spoofing to handle multipart PUT requests.
         formData.append(
           "status",
           existingCampaign?.status ?? "Upcoming"
@@ -254,8 +254,9 @@ export default function CampaignManagement() {
 
         formData.append("_method", "PUT");
 
+        // Correct update endpoint: PUT /api/campaigns/{id}
         const response = await axios.post(
-          `${ADMIN_API_URL}/${editingId}`,
+          `${API_URL}/${editingId}`,
           formData,
           config
         );
@@ -270,7 +271,8 @@ export default function CampaignManagement() {
 
         alert("Campaign updated successfully!");
       } else {
-        // Create new campaign in Laravel
+        // Create new campaign
+        // POST /api/admin/campaigns
         const response = await axios.post(
           ADMIN_API_URL,
           formData,
@@ -331,7 +333,8 @@ export default function CampaignManagement() {
     try {
       setError("");
 
-      await axios.delete(`${ADMIN_API_URL}/${id}`, config);
+      // Correct delete endpoint: DELETE /api/campaigns/{id}
+      await axios.delete(`${API_URL}/${id}`, config);
 
       setCampaigns((current) =>
         current.filter((campaign) => campaign.id !== id)
@@ -364,8 +367,9 @@ export default function CampaignManagement() {
     try {
       setError("");
 
+      // Correct complete endpoint: PATCH /api/campaigns/{id}/complete
       const response = await axios.patch(
-        `${ADMIN_API_URL}/${id}/complete`,
+        `${API_URL}/${id}/complete`,
         {},
         config
       );

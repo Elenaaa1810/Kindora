@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -10,6 +11,7 @@ use App\Models\CommunityPostLike;
 use App\Models\CommunityPostSave;
 use App\Models\CommunityComment;
 use App\Models\CommunityPostShare;
+use App\Notifications\MemberNotification;
 
 class CommunityController extends Controller
 {
@@ -19,15 +21,16 @@ class CommunityController extends Controller
 
     public function index(Request $request)
     {
-        $member = $request->user();
+        $member = Auth::guard('sanctum')->user();
 
         $posts = CommunityPost::with('member')
-            ->withCount(['likes', 'comments'])
+            ->withCount(['likes', 'comments', 'shares'])
             ->where('status', 'approved')
             ->latest()
             ->paginate(10);
 
         $posts->getCollection()->transform(function ($post) use ($member) {
+
             return [
                 'id' => $post->id,
                 'description' => $post->description,
@@ -51,6 +54,7 @@ class CommunityController extends Controller
 
                 'likes_count' => $post->likes_count,
                 'comments_count' => $post->comments_count,
+                'shares_count' => $post->shares_count,
 
                 'is_liked' => $member
                     ? $post->likes()
@@ -60,6 +64,12 @@ class CommunityController extends Controller
 
                 'is_saved' => $member
                     ? $post->saves()
+                        ->where('member_id', $member->id)
+                        ->exists()
+                    : false,
+
+                'is_shared' => $member
+                    ? $post->shares()
                         ->where('member_id', $member->id)
                         ->exists()
                     : false,
@@ -78,7 +88,6 @@ class CommunityController extends Controller
     {
         $member = $request->user();
 
-        // Only active members can submit posts.
         if (
             !$member ||
             strtolower((string) $member->status) !== 'active'
@@ -189,9 +198,25 @@ class CommunityController extends Controller
 
         $post = CommunityPost::findOrFail($postId);
 
+        $previousStatus = $post->status;
+
         $post->update([
             'status' => $validated['status'],
         ]);
+
+        // Notify the post owner when the post becomes approved.
+        if (
+            $validated['status'] === 'approved' &&
+            $previousStatus !== 'approved'
+        ) {
+            $post->member->notify(new MemberNotification([
+                'type' => 'post_approved',
+                'title' => 'Post Approved!',
+                'message' => 'Your community post has been approved by the admin.',
+                'post_id' => $post->id,
+                'url' => '/community'
+            ]));
+        }
 
         return response()->json([
             'message' => $validated['status'] === 'approved'
@@ -222,17 +247,38 @@ class CommunityController extends Controller
             ->first();
 
         if ($like) {
+
+            // Remove existing like.
             $like->delete();
+
             $liked = false;
             $message = 'Like removed.';
+
         } else {
+
+            // Save the new like to the database.
             CommunityPostLike::create([
                 'post_id' => $post->id,
                 'member_id' => $member->id,
             ]);
 
             $liked = true;
-            $message = 'Post liked.';
+            $message = 'Post liked successfully.';
+
+            // Notify the post owner only when another member likes the post.
+            if ($post->member_id != $member->id) {
+
+                $post->member->notify(new MemberNotification([
+                    'type' => 'post_liked',
+                    'title' => 'New Like',
+                    'message' => ($member->full_name ?? 'A member')
+                        . ' liked your community post.',
+                    'actor_id' => $member->id,
+                    'actor_name' => $member->full_name ?? 'Member',
+                    'post_id' => $post->id,
+                    'url' => '/community'
+                ]));
+            }
         }
 
         return response()->json([
@@ -316,6 +362,45 @@ class CommunityController extends Controller
             'content' => $validated['content'],
         ]);
 
+        // Notify the relevant member.
+        if ($parentId) {
+
+            // Reply: notify the original commenter.
+            $recipientId = $parent->member_id;
+            $type = 'comment_reply';
+            $title = 'New Reply';
+            $message = ($member->full_name ?? 'A member')
+                . ' replied to your comment.';
+
+        } else {
+
+            // New comment: notify the post owner.
+            $recipientId = $post->member_id;
+            $type = 'post_commented';
+            $title = 'New Comment';
+            $message = ($member->full_name ?? 'A member')
+                . ' commented on your post.';
+        }
+
+        // Avoid notifying yourself.
+        if ($recipientId != $member->id) {
+
+            $recipient = \App\Models\Member::find($recipientId);
+
+            if ($recipient) {
+                $recipient->notify(new MemberNotification([
+                    'type' => $type,
+                    'title' => $title,
+                    'message' => $message,
+                    'actor_id' => $member->id,
+                    'actor_name' => $member->full_name ?? 'Member',
+                    'post_id' => $post->id,
+                    'comment_id' => $comment->id,
+                    'url' => '/community'
+                ]));
+            }
+        }
+
         $comment->load('member');
 
         return response()->json([
@@ -351,6 +436,7 @@ class CommunityController extends Controller
             ->findOrFail($postId);
 
         $comments = $post->comments()
+            ->whereNull('parent_comment_id')
             ->with(['member', 'replies.member'])
             ->latest()
             ->get();
@@ -505,97 +591,125 @@ class CommunityController extends Controller
 
         return response()->json($posts);
     }
+
+
+    // ========================================
     // SHARE AN APPROVED COMMUNITY POST
-public function sharePost(Request $request, $postId)
-{
-    $member = $request->user();
+    // ========================================
 
-    if (strtolower($member->status ?? '') !== 'active') {
+    public function sharePost(Request $request, $postId)
+    {
+        $member = $request->user();
+
+        if (strtolower($member->status ?? '') !== 'active') {
+            return response()->json([
+                'message' => 'Only approved members can share posts.',
+            ], 403);
+        }
+
+        $post = CommunityPost::where('status', 'approved')
+            ->findOrFail($postId);
+
+        $share = CommunityPostShare::firstOrCreate([
+            'post_id' => $post->id,
+            'member_id' => $member->id,
+        ]);
+
+        // Notify the original post owner only for a new share.
+        if (
+            $share->wasRecentlyCreated &&
+            $post->member_id != $member->id
+        ) {
+            $post->member->notify(new MemberNotification([
+                'type' => 'post_shared',
+                'title' => 'Post Shared',
+                'message' => ($member->full_name ?? 'A member')
+                    . ' shared your community post.',
+                'actor_id' => $member->id,
+                'actor_name' => $member->full_name ?? 'Member',
+                'post_id' => $post->id,
+                'url' => '/community'
+            ]));
+        }
+
         return response()->json([
-            'message' => 'Only approved members can share posts.',
-        ], 403);
+            'message' => 'Post added to your profile.',
+            'is_shared' => true,
+            'shares_count' => $post->shares()->count(),
+        ]);
     }
 
-    $post = CommunityPost::where('status', 'approved')
-        ->findOrFail($postId);
 
-    CommunityPostShare::firstOrCreate([
-        'post_id' => $post->id,
-        'member_id' => $member->id,
-    ]);
+    // ========================================
+    // REMOVE A SHARE FROM THE MEMBER'S PROFILE
+    // ========================================
 
-    return response()->json([
-        'message' => 'Post added to your profile.',
-        'is_shared' => true,
-        'shares_count' => $post->shares()->count(),
-    ]);
-}
+    public function removeShare(Request $request, $postId)
+    {
+        $member = $request->user();
 
+        $share = CommunityPostShare::where('post_id', $postId)
+            ->where('member_id', $member->id)
+            ->first();
 
-// REMOVE A SHARE FROM THE MEMBER'S PROFILE
-public function removeShare(Request $request, $postId)
-{
-    $member = $request->user();
+        if (!$share) {
+            return response()->json([
+                'message' => 'This post is not in your shared posts.',
+            ], 404);
+        }
 
-    $share = CommunityPostShare::where('post_id', $postId)
-        ->where('member_id', $member->id)
-        ->first();
+        $share->delete();
 
-    if (!$share) {
         return response()->json([
-            'message' => 'This post is not in your shared posts.',
-        ], 404);
+            'message' => 'Post removed from your profile.',
+            'is_shared' => false,
+            'shares_count' => CommunityPostShare::where(
+                'post_id',
+                $postId
+            )->count(),
+        ]);
     }
 
-    $share->delete();
 
-    return response()->json([
-        'message' => 'Post removed from your profile.',
-        'is_shared' => false,
-        'shares_count' => CommunityPostShare::where(
-            'post_id',
-            $postId
-        )->count(),
-    ]);
-}
+    // ========================================
+    // GET POSTS SHARED BY THE LOGGED-IN MEMBER
+    // ========================================
 
+    public function sharedPosts(Request $request)
+    {
+        $member = $request->user();
 
-// GET POSTS SHARED BY THE LOGGED-IN MEMBER
-public function sharedPosts(Request $request)
-{
-    $member = $request->user();
+        $posts = CommunityPost::with('member')
+            ->withCount(['likes', 'comments', 'shares'])
+            ->where('status', 'approved')
+            ->whereHas('shares', function ($query) use ($member) {
+                $query->where('member_id', $member->id);
+            })
+            ->latest()
+            ->paginate(5);
 
-    $posts = CommunityPost::with('member')
-        ->withCount(['likes', 'comments', 'shares'])
-        ->where('status', 'approved')
-        ->whereHas('shares', function ($query) use ($member) {
-            $query->where('member_id', $member->id);
-        })
-        ->latest()
-        ->paginate(5);
+        $posts->getCollection()->transform(function ($post) use ($member) {
+            $post->media_url = $post->media_path
+                ? Storage::disk('public')->url($post->media_path)
+                : null;
 
-    $posts->getCollection()->transform(function ($post) use ($member) {
-        $post->media_url = $post->media_path
-            ? Storage::url($post->media_path)
-            : null;
+            $post->is_liked = $post->likes()
+                ->where('member_id', $member->id)
+                ->exists();
 
-        $post->is_liked = $post->likes()
-            ->where('member_id', $member->id)
-            ->exists();
+            $post->is_saved = $post->saves()
+                ->where('member_id', $member->id)
+                ->exists();
 
-        $post->is_saved = $post->saves()
-            ->where('member_id', $member->id)
-            ->exists();
+            $post->is_shared = true;
 
-        $post->is_shared = true;
+            $post->shared_at = CommunityPostShare::where('post_id', $post->id)
+                ->where('member_id', $member->id)
+                ->value('created_at');
 
-        $post->shared_at = CommunityPostShare::where('post_id', $post->id)
-            ->where('member_id', $member->id)
-            ->value('created_at');
+            return $post;
+        });
 
-        return $post;
-    });
-
-    return response()->json($posts);
-}
+        return response()->json($posts);
+    }
 }

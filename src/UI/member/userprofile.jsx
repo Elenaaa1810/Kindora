@@ -19,7 +19,6 @@ import {
   LogOut,
   X,
   MessageCircle,
-  Share2,
 } from "lucide-react";
 
 function UserProfile() {
@@ -175,8 +174,25 @@ function UserProfile() {
     }));
   };
 
+  // OPEN EDIT MODAL
+  const handleEdit = () => {
+    setError("");
+    setSuccess("");
+    setEditForm({ ...user });
+    setIsEditing(true);
+  };
+
+  // CLOSE EDIT MODAL
+  const handleCancelEdit = () => {
+    setEditForm({ ...user });
+    setIsEditing(false);
+    setError("");
+  };
+
   // SAVE PROFILE
-  const handleSave = async () => {
+  const handleSave = async (e) => {
+    if (e) e.preventDefault();
+
     setSaving(true);
     setError("");
     setSuccess("");
@@ -218,13 +234,19 @@ function UserProfile() {
 
       const updatedMember = data.member;
 
+      if (!updatedMember) {
+        throw new Error(
+          "Profile update response is missing member information. Please check your backend response."
+        );
+      }
+
       const updatedProfile = {
         ...user,
-        name: updatedMember.full_name || "",
-        email: updatedMember.email || "",
-        phone: updatedMember.phone || "",
-        location: updatedMember.location || "",
-        bio: updatedMember.motivation || "",
+        name: updatedMember.full_name ?? editForm.name,
+        email: updatedMember.email ?? editForm.email,
+        phone: updatedMember.phone ?? editForm.phone,
+        location: updatedMember.location ?? editForm.location,
+        bio: updatedMember.motivation ?? editForm.bio,
       };
 
       setUser(updatedProfile);
@@ -439,7 +461,7 @@ function UserProfile() {
           )}
 
           {/* PROFILE ERROR */}
-          {error && (
+          {error && !isEditing && (
             <div className="mb-6 whitespace-pre-line rounded-xl bg-red-50 p-4 text-sm text-red-600">
               {error}
             </div>
@@ -497,12 +519,7 @@ function UserProfile() {
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setError("");
-                          setSuccess("");
-                          setEditForm(user);
-                          setIsEditing(true);
-                        }}
+                        onClick={handleEdit}
                         className="flex items-center gap-2 rounded-xl bg-[#438FC4] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#397EAD]"
                       >
                         <Pencil size={15} />
@@ -546,7 +563,6 @@ function UserProfile() {
                     <div className="flex items-start gap-4">
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#DDF0FC] text-[#438FC4]">
                         <MessageCircle size={24} />
-                        
                       </div>
 
                       <div>
@@ -953,6 +969,231 @@ function UserProfile() {
           </p>
         </div>
       </footer>
+
+      {/* EDIT PROFILE MODAL */}
+      {isEditing && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#24364B]/50 px-4 py-6 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCancelEdit();
+            }
+          }}
+        >
+          <div className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            {/* MODAL HEADER */}
+            <div className="mb-6 flex items-start justify-between border-b border-slate-100 pb-5">
+              <div>
+                <p className="text-xs font-bold tracking-wider text-[#69ACD9]">
+                  ACCOUNT SETTINGS
+                </p>
+
+                <h2 className="mt-2 text-2xl font-extrabold text-[#24364B]">
+                  Edit Your Profile
+                </h2>
+
+                <p className="mt-2 text-sm text-slate-500">
+                  Update your personal information below.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                disabled={saving}
+                className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                aria-label="Close edit profile"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* MODAL ERROR */}
+            {error && (
+              <div className="mb-5 whitespace-pre-line rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">
+                {error}
+              </div>
+            )}
+
+            {/* EDIT FORM */}
+            <form onSubmit={handleSave} className="space-y-5">
+              {/* FULL NAME */}
+              <div>
+                <label
+                  htmlFor="profile-name"
+                  className="mb-2 block text-sm font-semibold text-[#24364B]"
+                >
+                  Full Name
+                </label>
+
+                <div className="relative">
+                  <User
+                    size={18}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+
+                  <input
+                    id="profile-name"
+                    type="text"
+                    name="name"
+                    value={editForm.name}
+                    onChange={handleInputChange}
+                    required
+                    maxLength={255}
+                    disabled={saving}
+                    placeholder="Enter your full name"
+                    className="w-full rounded-xl border border-slate-200 bg-[#F7FAFD] py-3 pl-11 pr-4 text-sm text-[#24364B] outline-none transition focus:border-[#438FC4] focus:ring-2 focus:ring-[#438FC4]/10 disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* EMAIL */}
+              <div>
+                <label
+                  htmlFor="profile-email"
+                  className="mb-2 block text-sm font-semibold text-[#24364B]"
+                >
+                  Email Address
+                </label>
+
+                <div className="relative">
+                  <Mail
+                    size={18}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+
+                  <input
+                    id="profile-email"
+                    type="email"
+                    name="email"
+                    value={editForm.email}
+                    onChange={handleInputChange}
+                    required
+                    maxLength={255}
+                    disabled={saving}
+                    placeholder="Enter your email address"
+                    className="w-full rounded-xl border border-slate-200 bg-[#F7FAFD] py-3 pl-11 pr-4 text-sm text-[#24364B] outline-none transition focus:border-[#438FC4] focus:ring-2 focus:ring-[#438FC4]/10 disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* PHONE */}
+              <div>
+                <label
+                  htmlFor="profile-phone"
+                  className="mb-2 block text-sm font-semibold text-[#24364B]"
+                >
+                  Phone Number
+                </label>
+
+                <div className="relative">
+                  <Phone
+                    size={18}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+
+                  <input
+                    id="profile-phone"
+                    type="tel"
+                    name="phone"
+                    value={editForm.phone}
+                    onChange={handleInputChange}
+                    maxLength={30}
+                    disabled={saving}
+                    placeholder="Enter your phone number"
+                    className="w-full rounded-xl border border-slate-200 bg-[#F7FAFD] py-3 pl-11 pr-4 text-sm text-[#24364B] outline-none transition focus:border-[#438FC4] focus:ring-2 focus:ring-[#438FC4]/10 disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* LOCATION */}
+              <div>
+                <label
+                  htmlFor="profile-location"
+                  className="mb-2 block text-sm font-semibold text-[#24364B]"
+                >
+                  Location
+                </label>
+
+                <div className="relative">
+                  <MapPin
+                    size={18}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+
+                  <input
+                    id="profile-location"
+                    type="text"
+                    name="location"
+                    value={editForm.location}
+                    onChange={handleInputChange}
+                    maxLength={255}
+                    disabled={saving}
+                    placeholder="Enter your location"
+                    className="w-full rounded-xl border border-slate-200 bg-[#F7FAFD] py-3 pl-11 pr-4 text-sm text-[#24364B] outline-none transition focus:border-[#438FC4] focus:ring-2 focus:ring-[#438FC4]/10 disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* BIO / MOTIVATION */}
+              <div>
+                <label
+                  htmlFor="profile-bio"
+                  className="mb-2 block text-sm font-semibold text-[#24364B]"
+                >
+                  About Me / Motivation
+                </label>
+
+                <textarea
+                  id="profile-bio"
+                  name="bio"
+                  value={editForm.bio}
+                  onChange={handleInputChange}
+                  rows={4}
+                  maxLength={1000}
+                  disabled={saving}
+                  placeholder="Tell us a little about yourself and why you enjoy volunteering..."
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-[#F7FAFD] p-4 text-sm text-[#24364B] outline-none transition focus:border-[#438FC4] focus:ring-2 focus:ring-[#438FC4]/10 disabled:opacity-60"
+                />
+
+                <p className="mt-1 text-right text-xs text-slate-400">
+                  {editForm.bio.length}/1000 characters
+                </p>
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                  className="rounded-xl border border-slate-200 px-6 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#397EAD] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={17} />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

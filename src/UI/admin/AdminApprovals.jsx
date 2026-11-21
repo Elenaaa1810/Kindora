@@ -23,13 +23,17 @@ const API_URL = "http://127.0.0.1:8000/api/admin/members";
 
 // Include admin authentication token in every request
 const getAdminHeaders = () => {
-  const token = localStorage.getItem("adminToken");
+    const token = localStorage.getItem("adminToken");
 
-  return {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
+    if (!token) {
+        throw new Error("Admin token not found. Please log in again.");
+    }
+
+    return {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
 };
 
 // Read Laravel response and display useful errors
@@ -192,7 +196,9 @@ export default function MemberApprovals() {
         headers: getAdminHeaders(),
       });
 
-      await readResponse(response);
+      const result = await readResponse(response);
+
+console.log("Approval result:", result);
 
       const refreshed = await fetchApplicants();
 

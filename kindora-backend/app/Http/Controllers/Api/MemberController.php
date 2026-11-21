@@ -7,8 +7,8 @@ use App\Models\Member;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Hash;
-
-
+use Illuminate\Support\Facades\Mail;
+use App\Mail\MemberApplicationStatusMail;
 
 class MemberController extends Controller
 {
@@ -53,16 +53,16 @@ class MemberController extends Controller
 
 
     // GET ALL MEMBER APPLICATIONS
-public function index()
-{
-    $members = Member::withCount('campaignRegistrations')
-        ->latest()
-        ->get();
+    public function index()
+    {
+        $members = Member::withCount('campaignRegistrations')
+            ->latest()
+            ->get();
 
-    return response()->json([
-        'members' => $members,
-    ]);
-}
+        return response()->json([
+            'members' => $members,
+        ]);
+    }
 
 
     // APPROVE AN APPLICATION
@@ -74,13 +74,38 @@ public function index()
             ], 422);
         }
 
+        // Update member status
         $member->update([
             'status' => 'Active',
             'rejection_reason' => null,
         ]);
 
+        // Send approval email
+        $emailSent = true;
+
+        try {
+            Mail::to($member->email)->send(
+                new MemberApplicationStatusMail(
+                    $member->fresh(),
+                    'approved'
+                )
+            );
+        } catch (\Throwable $e) {
+            $emailSent = false;
+
+            \Log::error('Kindora approval email failed.', [
+                'member_id' => $member->id,
+                'email' => $member->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return response()->json([
-            'message' => 'Application approved successfully.',
+            'message' => $emailSent
+                ? 'Application approved successfully. Approval email sent.'
+                : 'Application approved successfully, but the notification email could not be sent.',
+
+            'email_sent' => $emailSent,
             'member' => $member->fresh(),
         ]);
     }
@@ -99,13 +124,39 @@ public function index()
             ], 422);
         }
 
+        // Update member status and rejection reason
         $member->update([
             'status' => 'rejected',
             'rejection_reason' => $validated['rejection_reason'],
         ]);
 
+        // Send rejection email
+        $emailSent = true;
+
+        try {
+            Mail::to($member->email)->send(
+                new MemberApplicationStatusMail(
+                    $member->fresh(),
+                    'rejected',
+                    $validated['rejection_reason']
+                )
+            );
+        } catch (\Throwable $e) {
+            $emailSent = false;
+
+            \Log::error('Kindora rejection email failed.', [
+                'member_id' => $member->id,
+                'email' => $member->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return response()->json([
-            'message' => 'Application rejected successfully.',
+            'message' => $emailSent
+                ? 'Application rejected successfully. Rejection email sent.'
+                : 'Application rejected successfully, but the notification email could not be sent.',
+
+            'email_sent' => $emailSent,
             'member' => $member->fresh(),
         ]);
     }
@@ -163,74 +214,79 @@ public function index()
             'member' => $member,
         ]);
     }
+
+
     // GET LOGGED-IN MEMBER PROFILE
-        public function profile(Request $request)
-        {
-            $member = $request->user();
+    public function profile(Request $request)
+    {
+        $member = $request->user();
 
-            return response()->json([
-                'message' => 'Profile retrieved successfully.',
-                'member' => $member->makeHidden([
-                    'password',
-                    'remember_token',
-                ]),
-            ]);
-        }
-        // UPDATE MEMBER PROFILE
-public function update(Request $request)
-{
-    $member = $request->user();
-
-    $validated = $request->validate([
-        'full_name' => 'required|string|max:255',
-
-        'email' => [
-            'required',
-            'email',
-            'max:255',
-            Rule::unique('members', 'email')->ignore($member->id),
-        ],
-
-        'phone' => 'nullable|string|max:20',
-
-        'location' => 'nullable|string|max:255',
-
-        'motivation' => 'nullable|string|max:1000',
-    ]);
-
-    $member->update($validated);
-
-    return response()->json([
-        'message' => 'Profile updated successfully!',
-        'member' => $member,
-    ], 200);
-}
-// SUSPEND OR RESTORE A MEMBER ACCOUNT
-public function updateStatus(Request $request, Member $member)
-{
-    $validated = $request->validate([
-        'status' => [
-            'required',
-            Rule::in(['Active', 'Suspended']),
-        ],
-    ]);
-
-    // Only approved members can be suspended or restored.
-    if (!in_array($member->status, ['Active', 'Suspended'])) {
         return response()->json([
-            'message' => 'Only approved members can be suspended or restored.',
-        ], 422);
+            'message' => 'Profile retrieved successfully.',
+            'member' => $member->makeHidden([
+                'password',
+                'remember_token',
+            ]),
+        ]);
     }
 
-    $member->update([
-        'status' => $validated['status'],
-    ]);
 
-    return response()->json([
-        'message' => $validated['status'] === 'Suspended'
-            ? 'Member account suspended successfully.'
-            : 'Member account restored successfully.',
-        'member' => $member->fresh(),
-    ]);
-}
+    // UPDATE MEMBER PROFILE
+    public function update(Request $request)
+    {
+        $member = $request->user();
+
+        $validated = $request->validate([
+            'full_name' => 'required|string|max:255',
+
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('members', 'email')->ignore($member->id),
+            ],
+
+            'phone' => 'nullable|string|max:20',
+            'location' => 'nullable|string|max:255',
+            'motivation' => 'nullable|string|max:1000',
+        ]);
+
+        $member->update($validated);
+
+        return response()->json([
+            'message' => 'Profile updated successfully!',
+            'member' => $member,
+        ], 200);
+    }
+
+
+    // SUSPEND OR RESTORE A MEMBER ACCOUNT
+    public function updateStatus(Request $request, Member $member)
+    {
+        $validated = $request->validate([
+            'status' => [
+                'required',
+                Rule::in(['Active', 'Suspended']),
+            ],
+        ]);
+
+        // Only approved members can be suspended or restored
+        if (!in_array($member->status, ['Active', 'Suspended'])) {
+            return response()->json([
+                'message' => 'Only approved members can be suspended or restored.',
+            ], 422);
+        }
+
+        $member->update([
+            'status' => $validated['status'],
+        ]);
+
+        return response()->json([
+            'message' => $validated['status'] === 'Suspended'
+                ? 'Member account suspended successfully.'
+                : 'Member account restored successfully.',
+
+            'member' => $member->fresh(),
+        ]);
+    }
 }

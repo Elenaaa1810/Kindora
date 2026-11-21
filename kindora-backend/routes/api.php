@@ -8,7 +8,7 @@ use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CampaignRegistrationController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\CommunityController;
-
+use App\Http\Controllers\Api\NotificationController;
 
 // ========================================
 // TEST BACKEND
@@ -175,6 +175,27 @@ Route::get(
     '/community/shared-posts',
     [CommunityController::class, 'sharedPosts']
 );
+// MEMBER NOTIFICATIONS
+
+Route::get('/member/notifications', [
+    NotificationController::class,
+    'index'
+]);
+
+Route::patch('/member/notifications/read-all', [
+    NotificationController::class,
+    'markAllAsRead'
+]);
+
+Route::patch('/member/notifications/{id}/read', [
+    NotificationController::class,
+    'markAsRead'
+]);
+
+Route::delete('/member/notifications/{id}', [
+    NotificationController::class,
+    'destroy'
+]);
 
 });
 

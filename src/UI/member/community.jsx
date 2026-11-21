@@ -533,39 +533,38 @@ export default function Community() {
       <Header />
 
       <main>
-    
 
         {/* MY FORUM SHORTCUT */}
-<section className="bg-white px-5 py-6 lg:px-8">
-  <div className="mx-auto max-w-7xl">
-    <div className="flex flex-col justify-between gap-5 rounded-2xl border border-[#DDF0FC] bg-[#F7FAFD] p-6 sm:flex-row sm:items-center sm:p-7">
-      <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#DDF0FC] text-[#438FC4]">
-          <Users size={24} />
-        </div>
+        <section className="bg-white px-5 py-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="flex flex-col justify-between gap-5 rounded-2xl border border-[#DDF0FC] bg-[#F7FAFD] p-6 sm:flex-row sm:items-center sm:p-7">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#DDF0FC] text-[#438FC4]">
+                  <Users size={24} />
+                </div>
 
-        <div>
-          <h2 className="text-xl font-extrabold text-[#24364B]">
-            My Forum
-          </h2>
+                <div>
+                  <h2 className="text-xl font-extrabold text-[#24364B]">
+                    My Forum
+                  </h2>
 
-          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
-            Visit your personal forum to see the posts you've created
-            and the community posts you've shared.
-          </p>
-        </div>
-      </div>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
+                    Visit your personal forum to see the posts you've created
+                    and the community posts you've shared.
+                  </p>
+                </div>
+              </div>
 
-      <a
-        href="/myforum"
-        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#397EAD]"
-      >
-        Visit My Forum
-        <ArrowRight size={17} />
-      </a>
-    </div>
-  </div>
-</section>
+              <a
+                href="/myforum"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#438FC4] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#397EAD]"
+              >
+                Visit My Forum
+                <ArrowRight size={17} />
+              </a>
+            </div>
+          </div>
+        </section>
 
         {/* COMMUNITY FEED */}
         <section className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
@@ -851,74 +850,103 @@ export default function Community() {
                         ))}
 
                       <div className="p-5 sm:px-6">
-                        <div className="flex items-center justify-between text-sm text-slate-500">
+                        {/* POST ENGAGEMENT COUNTS */}
+                        <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
                           <span className="flex items-center gap-1.5">
                             <Heart
                               size={16}
-                              className="text-[#69ACD9]"
+                              className={
+                                post.is_liked
+                                  ? "text-rose-500"
+                                  : "text-[#69ACD9]"
+                              }
+                              fill={post.is_liked ? "currentColor" : "none"}
                             />
                             {post.likes_count || 0} likes
                           </span>
 
                           <button
+                            type="button"
                             onClick={() => toggleComments(post.id)}
-                            className="hover:text-[#438FC4]"
+                            className="flex items-center gap-1 transition hover:text-[#438FC4]"
                           >
+                            <MessageCircle size={15} />
                             {post.comments_count || 0} comments
                           </button>
                         </div>
 
                         {/* POST ACTIONS */}
-                        <div className="mt-4 grid grid-cols-4 border-t border-slate-100 pt-3">
+                        <div className="mt-4 grid grid-cols-4 gap-2 border-t border-slate-100 pt-3">
+                          {/* LIKE */}
                           <button
+                            type="button"
                             onClick={() => toggleLike(post.id)}
-                            className={`flex items-center justify-center gap-1 rounded-lg py-3 text-sm font-semibold transition hover:bg-[#F7FAFD] ${
+                            className={`flex items-center justify-center gap-1 rounded-xl border py-2.5 text-xs font-semibold transition ${
                               post.is_liked
-                                ? "text-rose-500"
-                                : "text-slate-500"
+                                ? "border-rose-200 bg-rose-50 text-rose-500"
+                                : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-[#F7FAFD]"
                             }`}
                           >
                             <Heart
-                              size={18}
+                              size={17}
                               fill={
                                 post.is_liked
                                   ? "currentColor"
                                   : "none"
                               }
                             />
-                            <span className="hidden sm:inline">Like</span>
+                            <span className="hidden sm:inline">
+                              {post.is_liked ? "Liked" : "Like"}
+                            </span>
                           </button>
 
+                          {/* COMMENT */}
                           <button
+                            type="button"
                             onClick={() => toggleComments(post.id)}
-                            className="flex items-center justify-center gap-1 rounded-lg py-3 text-sm font-semibold text-slate-500 transition hover:bg-[#F7FAFD]"
+                            className={`flex items-center justify-center gap-1 rounded-xl border py-2.5 text-xs font-semibold transition ${
+                              showComments
+                                ? "border-[#DDF0FC] bg-[#EAF5FC] text-[#438FC4]"
+                                : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-[#F7FAFD]"
+                            }`}
                           >
-                            <MessageCircle size={18} />
-                            <span className="hidden sm:inline">Comment</span>
+                            <MessageCircle size={17} />
+                            <span className="hidden sm:inline">
+                              Comment
+                            </span>
                           </button>
 
+                          {/* SAVE */}
                           <button
+                            type="button"
                             onClick={() => toggleSave(post.id)}
                             disabled={savingPost === post.id}
-                            className={`flex items-center justify-center gap-1 rounded-lg py-3 text-sm font-semibold transition hover:bg-[#F7FAFD] ${
+                            className={`flex items-center justify-center gap-1 rounded-xl border py-2.5 text-xs font-semibold transition disabled:opacity-50 ${
                               post.is_saved
-                                ? "text-[#438FC4]"
-                                : "text-slate-500"
+                                ? "border-[#B9DDF4] bg-[#EAF5FC] text-[#438FC4]"
+                                : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-[#F7FAFD]"
                             }`}
                           >
                             <Bookmark
-                              size={18}
+                              size={17}
                               fill={
                                 post.is_saved
                                   ? "currentColor"
                                   : "none"
                               }
                             />
-                            <span className="hidden sm:inline">Save</span>
+                            <span className="hidden sm:inline">
+                              {savingPost === post.id
+                                ? "Saving..."
+                                : post.is_saved
+                                ? "Saved"
+                                : "Save"}
+                            </span>
                           </button>
 
                           {/* SHARE TO PROFILE */}
                           <button
+                            type="button"
                             onClick={() => sharePost(post)}
                             disabled={
                               sharingPost === post.id ||
@@ -934,14 +962,14 @@ export default function Community() {
                                 ? "Already shared to your profile"
                                 : "Share to your profile"
                             }
-                            className={`flex items-center justify-center gap-1 rounded-lg py-3 text-sm font-semibold transition hover:bg-[#F7FAFD] disabled:cursor-not-allowed disabled:opacity-60 ${
+                            className={`flex items-center justify-center gap-1 rounded-xl border py-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 ${
                               post.is_shared
-                                ? "text-[#438FC4]"
-                                : "text-slate-500"
+                                ? "border-[#B9DDF4] bg-[#EAF5FC] text-[#438FC4]"
+                                : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-[#F7FAFD]"
                             }`}
                           >
                             <Share2
-                              size={18}
+                              size={17}
                               fill={post.is_shared ? "currentColor" : "none"}
                             />
                             <span className="hidden sm:inline">
@@ -972,6 +1000,7 @@ export default function Community() {
                                   </p>
 
                                   <button
+                                    type="button"
                                     onClick={() =>
                                       setReplyingTo(
                                         replyingTo === comment.id
