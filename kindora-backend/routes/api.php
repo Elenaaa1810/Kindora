@@ -53,6 +53,11 @@ Route::get('/campaigns/{id}', [
     'show'
 ]);
 
+Route::get('/stats', [
+    CampaignController::class,
+    'stats'
+]);
+
 
 // ========================================
 // PUBLIC COMMUNITY ROUTES

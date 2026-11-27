@@ -15,6 +15,7 @@ import {
   RefreshCw,
   ChevronRight,
   Inbox,
+  X,
 } from "lucide-react";
 
 const API_URL = "http://127.0.0.1:8000/api";
@@ -73,11 +74,17 @@ const getNotificationStyle = (type) => {
         color: "bg-cyan-100 text-cyan-600",
       };
 
-    case "post_approved":
-      return {
-        icon: CheckCircle,
-        color: "bg-green-100 text-green-600",
-      };
+case "post_approved":
+  return {
+    icon: CheckCircle,
+    color: "bg-green-100 text-green-600",
+  };
+
+case "post_rejected":
+  return {
+    icon: X,
+    color: "bg-red-100 text-red-600",
+  };
 
     case "attendance_present":
       return {
@@ -321,29 +328,6 @@ export default function Notifications() {
             <Check size={17} />
             Mark all as read
           </button>
-        </div>
-
-        {/* Notification summary */}
-        <div className="mb-6 grid grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Total Notifications
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-[#24364B]">
-              {notifications.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Unread Notifications
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-[#438FC4]">
-              {unreadCount}
-            </p>
-          </div>
         </div>
 
         {/* Notification list */}

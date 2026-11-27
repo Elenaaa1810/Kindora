@@ -107,21 +107,23 @@ export default function Campaigns() {
 
       const data = await response.json();
 
-      const allCampaigns = data.map((campaign) => ({
-        ...campaign,
-
-        category:
+      const allCampaigns = data.map((campaign) => {
+        const normalizedCategory =
           campaign.category === "Donation"
             ? "Charity"
-            : campaign.category,
+            : campaign.category;
 
-        volunteers: Number(campaign.volunteers ?? 0),
-
-        image:
-          campaign.image_url ||
-          fallbackImages[campaign.category] ||
-          fallbackImages.Community,
-      }));
+        return {
+          ...campaign,
+          category: normalizedCategory,
+          volunteers: Number(campaign.volunteers ?? 0),
+          capacity: Number(campaign.capacity ?? 0),
+          image:
+            campaign.image_url ||
+            fallbackImages[normalizedCategory] ||
+            fallbackImages.Community,
+        };
+      });
 
       setCampaigns(allCampaigns);
     } catch (err) {
@@ -168,9 +170,11 @@ export default function Campaigns() {
 
       const data = await response.json();
 
-      setJoinedCampaigns(
-        (data.campaign_ids || []).map(Number)
-      );
+      const joinedIds = (data.joined || [])
+        .map((campaign) => Number(campaign.campaign_id))
+        .filter((id) => Number.isFinite(id));
+
+      setJoinedCampaigns(joinedIds);
     } catch (err) {
       console.error("Joined campaigns loading error:", err);
     }
@@ -285,7 +289,7 @@ export default function Campaigns() {
           alert("You have already joined this campaign.");
 
           setJoinedCampaigns((previous) => [
-            ...new Set([...previous, campaign.id]),
+            ...new Set([...previous, Number(campaign.id)]),
           ]);
 
           return;
@@ -295,19 +299,17 @@ export default function Campaigns() {
         return;
       }
 
-      // Update joined campaign status
       setJoinedCampaigns((previous) => [
-        ...new Set([...previous, campaign.id]),
+        ...new Set([...previous, Number(campaign.id)]),
       ]);
 
-      // Update volunteer count
       const updatedVolunteers = Number(
         data.volunteers ?? campaign.volunteers + 1
       );
 
       setCampaigns((previous) =>
         previous.map((item) =>
-          item.id === campaign.id
+          Number(item.id) === Number(campaign.id)
             ? {
                 ...item,
                 volunteers: updatedVolunteers,
@@ -316,7 +318,6 @@ export default function Campaigns() {
         )
       );
 
-      // Update selected campaign details
       setSelectedCampaign((previous) =>
         previous?.id === campaign.id
           ? {
@@ -571,7 +572,6 @@ export default function Campaigns() {
                         {campaign.title}
                       </h3>
 
-                      {/* Short description preview */}
                       <p className="mt-3 line-clamp-2 min-h-[3rem] text-sm leading-6 text-slate-500">
                         {campaign.description}
                       </p>
@@ -622,7 +622,7 @@ export default function Campaigns() {
                       </div>
 
                       {/* View details */}
-                      <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-5 mt-5">
+                      <div className="mt-auto mt-5 flex items-center justify-between border-t border-slate-100 pt-5">
                         <span className="text-sm font-bold text-[#397EAD]">
                           View Details
                         </span>
@@ -701,14 +701,14 @@ export default function Campaigns() {
       {/* Campaign Details Popup Modal */}
       {selectedCampaign && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-6 backdrop-blur-sm sm:p-8 lg:p-10"
           onClick={() => setSelectedCampaign(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="campaign-modal-title"
-            className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
+            className="relative max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             {/* Close button */}
@@ -725,7 +725,10 @@ export default function Campaigns() {
               <img
                 src={selectedCampaign.image}
                 alt={selectedCampaign.title}
-                className="h-56 w-full object-cover sm:h-72"
+                className="h-56 w-full object-cover sm:h-72 lg:h-80"
+                onError={(event) => {
+                  event.currentTarget.src = fallbackImages.Community;
+                }}
               />
 
               <span
@@ -745,10 +748,10 @@ export default function Campaigns() {
             </div>
 
             {/* Campaign information */}
-            <div className="p-6 sm:p-8">
+            <div className="p-6 sm:p-8 lg:p-10">
               <h2
                 id="campaign-modal-title"
-                className="text-2xl font-extrabold text-[#24364B] sm:text-3xl"
+                className="text-2xl font-extrabold text-[#24364B] sm:text-3xl lg:text-4xl"
               >
                 {selectedCampaign.title}
               </h2>
@@ -759,13 +762,13 @@ export default function Campaigns() {
                   About This Campaign
                 </h3>
 
-                <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">
+                <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600 sm:text-base sm:leading-8">
                   {selectedCampaign.description || "No description available."}
                 </p>
               </div>
 
               {/* Campaign details */}
-              <div className="mt-7 grid gap-4 rounded-2xl bg-[#F7FAFD] p-5 sm:grid-cols-2">
+              <div className="mt-7 grid gap-5 rounded-2xl bg-[#F7FAFD] p-5 sm:grid-cols-2 sm:p-7">
                 <div className="flex items-start gap-3">
                   <CalendarDays
                     size={21}
@@ -876,12 +879,12 @@ export default function Campaigns() {
                 <button
                   onClick={() => handleJoin(selectedCampaign)}
                   disabled={
-                    joinedCampaigns.includes(selectedCampaign.id) ||
+                    joinedCampaigns.includes(Number(selectedCampaign.id)) ||
                     selectedCampaign.volunteers >= selectedCampaign.capacity ||
                     joiningCampaignId !== null
                   }
                   className={`mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-4 font-bold transition ${
-                    joinedCampaigns.includes(selectedCampaign.id)
+                    joinedCampaigns.includes(Number(selectedCampaign.id))
                       ? "cursor-not-allowed bg-green-100 text-green-700"
                       : joiningCampaignId === selectedCampaign.id
                         ? "cursor-wait bg-[#DDF0FC] text-[#397EAD]"
@@ -890,7 +893,7 @@ export default function Campaigns() {
                           : "bg-[#24364B] text-white hover:bg-[#344F6B]"
                   }`}
                 >
-                  {joinedCampaigns.includes(selectedCampaign.id)
+                  {joinedCampaigns.includes(Number(selectedCampaign.id))
                     ? "Already Joined"
                     : joiningCampaignId === selectedCampaign.id
                       ? "Joining..."
@@ -898,7 +901,7 @@ export default function Campaigns() {
                         ? "Campaign Full"
                         : "Join Campaign"}
 
-                  {!joinedCampaigns.includes(selectedCampaign.id) &&
+                  {!joinedCampaigns.includes(Number(selectedCampaign.id)) &&
                     joiningCampaignId !== selectedCampaign.id &&
                     selectedCampaign.volunteers < selectedCampaign.capacity && (
                       <ArrowRight size={18} />
@@ -936,7 +939,7 @@ export default function Campaigns() {
           </p>
 
           <p className="text-sm text-slate-400">
-            © 2026 Kindora. Demo project.
+            © 2026 Kindora.
           </p>
         </div>
       </footer>

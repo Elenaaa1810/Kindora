@@ -120,6 +120,30 @@ function App() {
     return () => controller.abort();
   }, []);
 
+  const [stats, setStats] = useState({
+  active_volunteers: 0,
+  completed_campaigns: 0,
+  volunteer_attendances: 0,
+});
+useEffect(() => {
+  const fetchStats = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/stats");
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch homepage statistics");
+      }
+
+      const data = await response.json();
+      setStats(data);
+    } catch (error) {
+      console.error("Error fetching homepage statistics:", error);
+    }
+  };
+
+  fetchStats();
+}, []);
+
   // Format campaign date
   const formatDate = (date) => {
     if (!date) return "Date to be announced";
@@ -252,10 +276,22 @@ function App() {
   <div className="mx-auto grid max-w-7xl grid-cols-2 gap-4 rounded-3xl border border-[#E4EFF7] bg-white p-6 shadow-sm sm:grid-cols-3 sm:p-8">
 
     {[
-      { number: "2,450+", label: "Community Volunteers", icon: Users },
-      { number: "128+", label: "Campaigns Completed", icon: HeartHandshake },
-      { number: "35+", label: "Communities Helped", icon: MapPin },
-    ].map((stat) => {
+  {
+    number: stats.active_volunteers.toLocaleString(),
+    label: "Active Volunteers",
+    icon: Users,
+  },
+  {
+    number: stats.completed_campaigns.toLocaleString(),
+    label: "Campaigns Completed",
+    icon: HeartHandshake,
+  },
+  {
+    number: stats.volunteer_attendances.toLocaleString(),
+    label: "Volunteer Attendances",
+    icon: HandHeart,
+  },
+].map((stat) => {
       const Icon = stat.icon;
 
       return (
@@ -280,9 +316,7 @@ function App() {
 
   </div>
 
-  <p className="mx-auto mt-3 max-w-7xl text-right text-xs text-slate-400">
-    Sample statistics for demonstration
-  </p>
+
 </section>
 
         {/* Featured Campaigns */}
@@ -514,7 +548,7 @@ function App() {
           </p>
 
           <p className="text-sm text-slate-400">
-            © 2026 Kindora. Demo project.
+            © 2026 Kindora.
           </p>
 
         </div>

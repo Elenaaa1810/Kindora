@@ -1,14 +1,15 @@
 <?php
 
 namespace App\Models;
+
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+
 class Member extends Authenticatable
 {
-    // use HasApiTokens;
-  use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     protected $table = 'members';
 
@@ -32,6 +33,11 @@ class Member extends Authenticatable
         'password',
     ];
 
+    // Include the name attribute when the member is converted to JSON.
+    protected $appends = [
+        'name',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -40,34 +46,61 @@ class Member extends Authenticatable
         ];
     }
 
-public function campaignRegistrations()
-{
-    return $this->hasMany(
-        \App\Models\CampaignRegistration::class,
-        'member_id'
-    );
-}
-// Community posts created by this member
-public function communityPosts()
-{
-    return $this->hasMany(CommunityPost::class);
-}
+    // Use full_name as the name attribute for frontend compatibility.
+    public function getNameAttribute()
+    {
+        return $this->full_name;
+    }
 
-// Likes made by this member
-public function communityLikes()
-{
-    return $this->hasMany(CommunityPostLike::class);
-}
+    // ========================================
+    // CAMPAIGN RELATIONSHIPS
+    // ========================================
 
-// Posts saved by this member
-public function communitySaves()
-{
-    return $this->hasMany(CommunityPostSave::class);
-}
+    public function campaignRegistrations()
+    {
+        return $this->hasMany(
+            CampaignRegistration::class,
+            'member_id'
+        );
+    }
 
-// Comments written by this member
-public function communityComments()
-{
-    return $this->hasMany(CommunityComment::class);
-}
+    // ========================================
+    // COMMUNITY RELATIONSHIPS
+    // ========================================
+
+    // Community posts created by this member.
+    public function communityPosts()
+    {
+        return $this->hasMany(
+            CommunityPost::class,
+            'member_id'
+        );
+    }
+
+    // Likes made by this member.
+    public function communityLikes()
+    {
+        return $this->hasMany(
+            CommunityPostLike::class,
+            'member_id'
+        );
+    }
+
+    // Posts saved by this member.
+    public function communitySaves()
+    {
+        return $this->hasMany(
+            CommunityPostSave::class,
+            'member_id'
+        );
+    }
+
+    // Comments written by this member.
+    public function communityComments()
+    {
+        return $this->hasMany(
+            CommunityComment::class,
+            'member_id'
+        );
+    }
 }

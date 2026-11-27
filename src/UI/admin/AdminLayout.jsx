@@ -1,6 +1,13 @@
 
-import React, { useState, useEffect, useRef } from "react";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Outlet,
+  NavLink,
+  Link,
+  useNavigate,
+  useLocation,
+} from "react-router-dom";
+
 import {
   HeartHandshake,
   LayoutDashboard,
@@ -14,11 +21,11 @@ import {
   ChevronRight,
   Bell,
   ShieldCheck,
+  MessageSquare,
   UserPlus,
   CalendarPlus,
-  Clock,
   RefreshCw,
-  MessageSquare,
+  Clock,
 } from "lucide-react";
 
 const API_URL = "http://127.0.0.1:8000/api";
@@ -55,6 +62,7 @@ const navigation = [
     path: "/admin/community-posts",
     icon: MessageSquare,
   },
+  
 ];
 
 const getAdminHeaders = () => {
@@ -83,6 +91,7 @@ const formatNotificationDate = (date) => {
   return parsedDate.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
@@ -90,24 +99,30 @@ const formatNotificationDate = (date) => {
 
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-
-  const [notificationsViewed, setNotificationsViewed] = useState(
-    localStorage.getItem("adminNotificationsViewed") === "true"
-  );
 
   const [notifications, setNotifications] = useState([]);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState("");
 
-  const notificationRef = useRef(null);
+  const [lastViewedAt, setLastViewedAt] = useState(() =>
+    Number(localStorage.getItem("adminNotificationsLastViewed")) || 0
+  );
+
   const navigate = useNavigate();
+  const location = useLocation();
 
   // ========================================
-  // FETCH ALL ADMIN NOTIFICATIONS
+  // FETCH ADMIN NOTIFICATIONS
   // ========================================
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
+    const token = localStorage.getItem("adminToken");
+
+    if (!token) {
+      setNotifications([]);
+      return;
+    }
+
     setNotificationLoading(true);
     setNotificationError("");
 
@@ -129,23 +144,21 @@ export default function AdminLayout() {
           headers,
         }),
 
-        fetch(`${API_URL}/admin/community-posts?status=pending`, {
+        fetch(`${API_URL}/admin/community-posts?status=all`, {
           method: "GET",
           headers,
         }),
       ]);
 
-      // Get member registration data
       const memberData = await memberResponse.json();
+      const registrationData = await registrationResponse.json();
+      const postData = await postResponse.json();
 
       if (!memberResponse.ok) {
         throw new Error(
           memberData.message || "Unable to load member registrations."
         );
       }
-
-      // Get campaign registration data
-      const registrationData = await registrationResponse.json();
 
       if (!registrationResponse.ok) {
         throw new Error(
@@ -154,9 +167,6 @@ export default function AdminLayout() {
         );
       }
 
-      // Get pending community posts
-      const postData = await postResponse.json();
-
       if (!postResponse.ok) {
         throw new Error(
           postData.message || "Unable to load community posts."
@@ -164,18 +174,13 @@ export default function AdminLayout() {
       }
 
       const members = getArrayData(memberData, "members");
-
       const registrations = getArrayData(
         registrationData,
         "registrations"
       );
-
       const pendingPosts = getArrayData(postData, "posts");
 
-      // ========================================
-      // MEMBER REGISTRATION NOTIFICATIONS
-      // ========================================
-
+      // Member registrations
       const memberNotifications = members.map((member) => ({
         id: `member-${member.id}`,
         type: "member",
@@ -184,14 +189,10 @@ export default function AdminLayout() {
           member.full_name || member.name || "A member"
         } registered for Kindora.`,
         date: member.created_at,
-        icon: UserPlus,
         link: "/admin/approvals",
       }));
 
-      // ========================================
-      // CAMPAIGN REGISTRATION NOTIFICATIONS
-      // ========================================
-
+      // Campaign registrations
       const campaignNotifications = registrations.map((registration) => ({
         id: `campaign-${registration.id}`,
         type: "campaign",
@@ -206,14 +207,10 @@ export default function AdminLayout() {
           "a campaign"
         }.`,
         date: registration.created_at,
-        icon: CalendarPlus,
         link: "/admin/attendance",
       }));
 
-      // ========================================
-      // COMMUNITY POST NOTIFICATIONS
-      // ========================================
-
+      // Pending community posts
       const postNotifications = pendingPosts.map((post) => ({
         id: `post-${post.id}`,
         type: "post",
@@ -225,14 +222,10 @@ export default function AdminLayout() {
           "A member"
         } submitted a new community post.`,
         date: post.created_at,
-        icon: MessageSquare,
         link: "/admin/community-posts",
       }));
 
-      // ========================================
-      // COMBINE AND SORT NOTIFICATIONS
-      // ========================================
-
+      // Combine and sort notifications
       const combinedNotifications = [
         ...memberNotifications,
         ...campaignNotifications,
@@ -243,53 +236,47 @@ export default function AdminLayout() {
           (a, b) =>
             new Date(b.date).getTime() -
             new Date(a.date).getTime()
-        )
-        .slice(0, 10);
+        );
 
       setNotifications(combinedNotifications);
-
     } catch (error) {
       console.error("Notification error:", error);
       setNotificationError(error.message);
     } finally {
       setNotificationLoading(false);
     }
-  };
+  }, []);
 
-  // ========================================
-  // LOAD NOTIFICATIONS EVERY 30 SECONDS
-  // ========================================
-
+  // Fetch notifications when layout loads
   useEffect(() => {
     fetchNotifications();
 
-    const interval = setInterval(() => {
-      fetchNotifications();
-    }, 30000);
+    const interval = setInterval(fetchNotifications, 30000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchNotifications]);
 
   // ========================================
-  // CLOSE DROPDOWN WHEN CLICKING OUTSIDE
+  // MARK NOTIFICATIONS AS VIEWED
   // ========================================
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        notificationRef.current &&
-        !notificationRef.current.contains(event.target)
-      ) {
-        setNotificationOpen(false);
-      }
-    };
+    if (location.pathname === "/admin/notifications") {
+      const viewedTime = Date.now();
 
-    document.addEventListener("mousedown", handleClickOutside);
+      localStorage.setItem(
+        "adminNotificationsLastViewed",
+        String(viewedTime)
+      );
 
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
+      setLastViewedAt(viewedTime);
+    }
+  }, [location.pathname]);
+
+  // Check whether there are new notifications
+  const hasNewNotifications = notifications.some((notification) => {
+    return new Date(notification.date).getTime() > lastViewedAt;
+  });
 
   // ========================================
   // ADMIN LOGOUT
@@ -311,33 +298,9 @@ export default function AdminLayout() {
     } finally {
       localStorage.removeItem("adminToken");
       localStorage.removeItem("adminInfo");
+      localStorage.removeItem("adminNotificationsLastViewed");
+
       window.location.href = "/admin/login";
-    }
-  };
-
-  // ========================================
-  // CLICK NOTIFICATION
-  // ========================================
-
-  const handleNotificationClick = (notification) => {
-    setNotificationOpen(false);
-    navigate(notification.link);
-  };
-
-  // ========================================
-  // CLICK NOTIFICATION BELL
-  // ========================================
-
-  const handleBellClick = () => {
-    const willOpen = !notificationOpen;
-
-    setNotificationOpen(willOpen);
-
-    if (willOpen) {
-      setNotificationsViewed(true);
-      localStorage.setItem("adminNotificationsViewed", "true");
-
-      fetchNotifications();
     }
   };
 
@@ -362,7 +325,6 @@ export default function AdminLayout() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-
         {/* Logo */}
         <div className="flex h-20 items-center justify-between border-b border-slate-100 px-6">
           <NavLink
@@ -442,6 +404,11 @@ export default function AdminLayout() {
 
                     <span className="flex-1">{item.name}</span>
 
+                    {item.path === "/admin/notifications" &&
+                      hasNewNotifications && (
+                        <span className="h-2 w-2 rounded-full bg-red-500" />
+                      )}
+
                     {isActive && <ChevronRight size={17} />}
                   </>
                 )}
@@ -461,7 +428,7 @@ export default function AdminLayout() {
           </button>
 
           <p className="mt-3 text-center text-xs text-slate-400">
-            KindConnect © 2026
+            Kindora © 2026
           </p>
         </div>
       </aside>
@@ -494,153 +461,19 @@ export default function AdminLayout() {
 
           <div className="flex items-center gap-3 sm:gap-5">
 
-            {/* Notification bell and dropdown */}
-            <div className="relative" ref={notificationRef}>
-              <button
-                onClick={handleBellClick}
-                className="relative rounded-xl p-2.5 text-slate-500 transition hover:bg-sky-50 hover:text-sky-700"
-                aria-label="Notifications"
-                title="Notifications"
-              >
-                <Bell size={21} />
+            {/* Notification bell - opens separate page */}
+            <Link
+              to="/admin/notifications"
+              aria-label="Admin notifications"
+              title="Notifications"
+              className="relative rounded-xl p-2.5 text-slate-500 transition hover:bg-sky-50 hover:text-sky-700"
+            >
+              <Bell size={21} />
 
-                {/* Red notification dot */}
-                {notifications.length > 0 && !notificationsViewed && (
-                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
-                )}
-              </button>
-
-              {/* Notification dropdown */}
-              {notificationOpen && (
-                <div className="absolute right-0 top-14 z-50 w-[340px] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl sm:w-[390px]">
-
-                  {/* Dropdown header */}
-                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                    <div>
-                      <h3 className="font-bold text-slate-800">
-                        Notifications
-                      </h3>
-
-                      <p className="mt-1 text-xs text-slate-400">
-                        Recent registrations and community posts
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={fetchNotifications}
-                      disabled={notificationLoading}
-                      className="rounded-lg p-2 text-slate-400 transition hover:bg-sky-50 hover:text-sky-600"
-                      title="Refresh notifications"
-                    >
-                      <RefreshCw
-                        size={16}
-                        className={
-                          notificationLoading ? "animate-spin" : ""
-                        }
-                      />
-                    </button>
-                  </div>
-
-                  {/* Notification list */}
-                  <div className="max-h-[400px] overflow-y-auto">
-
-                    {notificationLoading && notifications.length === 0 ? (
-                      <div className="py-10 text-center">
-                        <RefreshCw
-                          size={22}
-                          className="mx-auto animate-spin text-sky-500"
-                        />
-
-                        <p className="mt-3 text-sm text-slate-400">
-                          Loading notifications...
-                        </p>
-                      </div>
-                    ) : notificationError ? (
-                      <div className="px-5 py-8 text-center">
-                        <p className="text-sm text-rose-500">
-                          {notificationError}
-                        </p>
-
-                        <button
-                          onClick={fetchNotifications}
-                          className="mt-3 text-sm font-semibold text-sky-600 hover:underline"
-                        >
-                          Try again
-                        </button>
-                      </div>
-                    ) : notifications.length === 0 ? (
-                      <div className="px-5 py-10 text-center">
-                        <Bell
-                          size={28}
-                          className="mx-auto text-slate-300"
-                        />
-
-                        <p className="mt-3 text-sm font-semibold text-slate-600">
-                          No notifications yet
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-400">
-                          New registrations and posts will appear here.
-                        </p>
-                      </div>
-                    ) : (
-                      notifications.map((notification) => {
-                        const Icon = notification.icon;
-
-                        return (
-                          <button
-                            key={notification.id}
-                            onClick={() =>
-                              handleNotificationClick(notification)
-                            }
-                            className="flex w-full items-start gap-3 border-b border-slate-50 px-5 py-4 text-left transition hover:bg-sky-50"
-                          >
-                            <div
-                              className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                                notification.type === "member"
-                                  ? "bg-blue-100 text-blue-600"
-                                  : notification.type === "post"
-                                    ? "bg-amber-100 text-amber-600"
-                                    : "bg-purple-100 text-purple-600"
-                              }`}
-                            >
-                              <Icon size={19} />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-slate-800">
-                                {notification.title}
-                              </p>
-
-                              <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                                {notification.description}
-                              </p>
-
-                              <p className="mt-2 flex items-center gap-1 text-[11px] text-slate-400">
-                                <Clock size={12} />
-                                {formatNotificationDate(notification.date)}
-                              </p>
-                            </div>
-
-                            <ChevronRight
-                              size={16}
-                              className="mt-2 shrink-0 text-slate-300"
-                            />
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {/* Dropdown footer */}
-                  <div className="border-t border-slate-100 bg-slate-50 px-5 py-3">
-                    <p className="text-center text-xs text-slate-400">
-                      Showing the 10 most recent notifications
-                    </p>
-                  </div>
-                </div>
+              {hasNewNotifications && (
+                <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
               )}
-            </div>
+            </Link>
 
             <div className="hidden h-8 w-px bg-slate-200 sm:block" />
 
@@ -662,9 +495,18 @@ export default function AdminLayout() {
           </div>
         </header>
 
-        {/* Child pages appear here */}
+        {/* Child pages */}
         <main className="p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          <Outlet
+            context={{
+              notifications,
+              notificationLoading,
+              notificationError,
+              fetchNotifications,
+              formatNotificationDate,
+              lastViewedAt,
+            }}
+          />
         </main>
       </div>
     </div>

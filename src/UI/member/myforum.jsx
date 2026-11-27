@@ -65,6 +65,10 @@ async function apiRequest(url, options = {}) {
   return data;
 }
 
+// ========================================
+// FORMAT DATE
+// ========================================
+
 function formatDate(date) {
   if (!date) return "";
 
@@ -75,28 +79,81 @@ function formatDate(date) {
   });
 }
 
+// ========================================
+// GET POSTS FROM LARAVEL RESPONSE
+// ========================================
+
 function getPosts(response) {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  if (Array.isArray(response?.data)) {
+    return response.data;
+  }
+
+  if (Array.isArray(response?.posts)) {
+    return response.posts;
+  }
+
+  if (Array.isArray(response?.shared_posts)) {
+    return response.shared_posts;
+  }
+
+  return [];
+}
+
+// ========================================
+// GET MEMBER NAME
+// ========================================
+
+function getMemberName(member) {
   return (
-    response.data ||
-    response.posts ||
-    response.shared_posts ||
-    []
+    member?.full_name ||
+    member?.name ||
+    member?.user?.full_name ||
+    member?.user?.name ||
+    member?.author?.full_name ||
+    member?.author?.name ||
+    ""
   );
 }
+
+// ========================================
+// GET POST OWNER NAME
+// ========================================
+
+function getPostOwnerName(post) {
+  const originalPost = post?.post || post;
+
+  return (
+    getMemberName(originalPost?.member) ||
+    getMemberName(originalPost?.user) ||
+    getMemberName(originalPost?.author) ||
+    "Community Member"
+  );
+}
+
+// ========================================
+// GET INITIALS
+// ========================================
 
 function getInitials(name) {
   if (!name) return "M";
 
   return name
     .trim()
-    .split(" ")
+    .split(/\s+/)
     .slice(0, 2)
     .map((word) => word[0])
     .join("")
     .toUpperCase();
 }
 
-// SUPPORT BOTH FULL MEDIA URLS AND LARAVEL STORAGE PATHS
+// ========================================
+// GET MEDIA URL
+// ========================================
+
 function getMediaUrl(post) {
   const media = post?.media_url || post?.media_path;
 
@@ -116,7 +173,10 @@ function getMediaUrl(post) {
   return `${STORAGE_BASE}${media}`;
 }
 
+// ========================================
 // POST CARD
+// ========================================
+
 function PostCard({
   post,
   isShared,
@@ -139,8 +199,10 @@ function PostCard({
   sharing,
 }) {
   const originalPost = post.post || post;
+
   const postId = originalPost.id;
   const mediaUrl = getMediaUrl(originalPost);
+  const ownerName = getPostOwnerName(originalPost);
 
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition hover:shadow-md">
@@ -149,11 +211,12 @@ function PostCard({
       {isShared && (
         <div className="flex items-center gap-2 border-b border-slate-100 bg-[#F7FAFD] px-5 py-3 text-xs font-semibold text-slate-500">
           <Share2 size={14} className="text-[#438FC4]" />
+
           You shared this post
 
-          {post.shared_at && (
+          {(post.shared_at || originalPost.shared_at) && (
             <span className="ml-auto">
-              {formatDate(post.shared_at)}
+              {formatDate(post.shared_at || originalPost.shared_at)}
             </span>
           )}
         </div>
@@ -162,17 +225,19 @@ function PostCard({
       {/* POST HEADER */}
       <div className="p-5 sm:p-6">
         <div className="flex items-start gap-3">
+
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#DDF0FC] font-bold text-[#438FC4]">
-            {originalPost.member?.name ? (
-              getInitials(originalPost.member.name)
+            {ownerName !== "Community Member" ? (
+              getInitials(ownerName)
             ) : (
               <UserRound size={23} />
             )}
           </div>
 
           <div className="min-w-0 flex-1">
+
             <h3 className="font-bold text-[#24364B]">
-              {originalPost.member?.name || "Community Member"}
+              {ownerName}
             </h3>
 
             <p className="mt-1 text-xs text-slate-400">
@@ -180,6 +245,7 @@ function PostCard({
             </p>
 
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-400">
+
               <span className="flex items-center gap-1">
                 <CalendarDays size={14} />
                 {formatDate(originalPost.created_at)}
@@ -196,6 +262,7 @@ function PostCard({
                   Rejected
                 </span>
               )}
+
             </div>
           </div>
 
@@ -215,6 +282,7 @@ function PostCard({
               )}
             </button>
           )}
+
         </div>
 
         {/* ACTIVITY */}
@@ -253,15 +321,18 @@ function PostCard({
         )
       )}
 
-      {/* POST ENGAGEMENT COUNTS */}
+      {/* POST ENGAGEMENT */}
       <div className="px-5 py-4 sm:px-6">
+
         <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
+
           <span className="flex items-center gap-1.5">
             <Heart size={16} className="text-[#69ACD9]" />
             {originalPost.likes_count || 0} likes
           </span>
 
           <div className="flex items-center gap-4">
+
             <button
               type="button"
               onClick={() => onToggleComments(postId)}
@@ -275,11 +346,14 @@ function PostCard({
               <Share2 size={15} />
               {originalPost.shares_count || 0}
             </span>
+
           </div>
         </div>
 
         {/* POST ACTIONS */}
         <div className="mt-4 grid grid-cols-4 border-t border-slate-100 pt-3">
+
+          {/* LIKE */}
           <button
             type="button"
             onClick={() => onLike(postId)}
@@ -293,9 +367,11 @@ function PostCard({
               size={18}
               fill={originalPost.is_liked ? "currentColor" : "none"}
             />
+
             <span className="hidden sm:inline">Like</span>
           </button>
 
+          {/* COMMENT */}
           <button
             type="button"
             onClick={() => onToggleComments(postId)}
@@ -305,6 +381,7 @@ function PostCard({
             <span className="hidden sm:inline">Comment</span>
           </button>
 
+          {/* SAVE */}
           <button
             type="button"
             onClick={() => onSave(postId)}
@@ -319,11 +396,13 @@ function PostCard({
               size={18}
               fill={originalPost.is_saved ? "currentColor" : "none"}
             />
+
             <span className="hidden sm:inline">
               {saving ? "Saving..." : "Save"}
             </span>
           </button>
 
+          {/* SHARE */}
           <button
             type="button"
             onClick={() => onShare(postId)}
@@ -338,6 +417,7 @@ function PostCard({
               size={18}
               fill={originalPost.is_shared ? "currentColor" : "none"}
             />
+
             <span className="hidden sm:inline">
               {sharing
                 ? "Sharing..."
@@ -346,87 +426,103 @@ function PostCard({
                 : "Share"}
             </span>
           </button>
+
         </div>
 
         {/* COMMENTS SECTION */}
         {commentsOpen && (
           <div className="mt-3 border-t border-slate-100 pt-4">
+
             <div className="space-y-4">
 
-              {comments.map((comment) => (
-                <div
-                  key={comment.id}
-                  className="rounded-xl bg-[#F7FAFD] p-3"
-                >
-                  <p className="text-sm font-bold">
-                    {comment.member?.name || "Member"}
-                  </p>
+              {comments.map((comment) => {
 
-                  <p className="mt-1 break-words text-sm text-slate-600">
-                    {comment.content}
-                  </p>
+                const commentName =
+                  getMemberName(comment.member) || "Member";
 
-                  <button
-                    type="button"
-                    onClick={() => onReply(comment.id)}
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#438FC4] hover:underline"
+                return (
+                  <div
+                    key={comment.id}
+                    className="rounded-xl bg-[#F7FAFD] p-3"
                   >
-                    <MessageSquareReply size={14} />
-                    Reply
-                  </button>
 
-                  {/* REPLY INPUT */}
-                  {replyingTo === comment.id && (
-                    <form
-                      className="mt-3 flex gap-2"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        onAddComment(postId, comment.id);
-                      }}
+                    <p className="text-sm font-bold">
+                      {commentName}
+                    </p>
+
+                    <p className="mt-1 break-words text-sm text-slate-600">
+                      {comment.content}
+                    </p>
+
+                    {/* REPLY BUTTON */}
+                    <button
+                      type="button"
+                      onClick={() => onReply(comment.id)}
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#438FC4] hover:underline"
                     >
-                      <input
-                        value={replyInputs[comment.id] || ""}
-                        onChange={(event) =>
-                          onReplyInput(comment.id, event.target.value)
-                        }
-                        placeholder="Write a reply..."
-                        className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#8EC5E9]"
-                      />
+                      <MessageSquareReply size={14} />
+                      Reply
+                    </button>
 
-                      <button
-                        type="submit"
-                        aria-label="Send reply"
-                        className="rounded-xl bg-[#8EC5E9] px-3 text-[#183B55]"
+                    {/* REPLY INPUT */}
+                    {replyingTo === comment.id && (
+                      <form
+                        className="mt-3 flex gap-2"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          onAddComment(postId, comment.id);
+                        }}
                       >
-                        <Send size={16} />
-                      </button>
-                    </form>
-                  )}
+                        <input
+                          value={replyInputs[comment.id] || ""}
+                          onChange={(event) =>
+                            onReplyInput(comment.id, event.target.value)
+                          }
+                          placeholder="Write a reply..."
+                          className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#8EC5E9]"
+                        />
 
-                  {/* REPLIES */}
-                  {comment.replies?.length > 0 && (
-                    <div className="ml-4 mt-3 space-y-3 border-l-2 border-[#DDF0FC] pl-3">
-                      {comment.replies.map((reply) => (
-                        <div key={reply.id}>
-                          <p className="text-xs font-bold">
-                            {reply.member?.name || "Member"}
-                          </p>
+                        <button
+                          type="submit"
+                          aria-label="Send reply"
+                          className="rounded-xl bg-[#8EC5E9] px-3 text-[#183B55]"
+                        >
+                          <Send size={16} />
+                        </button>
+                      </form>
+                    )}
 
-                          <p className="mt-1 break-words text-sm text-slate-600">
-                            {reply.content}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                    {/* REPLIES */}
+                    {comment.replies?.length > 0 && (
+                      <div className="ml-4 mt-3 space-y-3 border-l-2 border-[#DDF0FC] pl-3">
+
+                        {comment.replies.map((reply) => (
+                          <div key={reply.id}>
+
+                            <p className="text-xs font-bold">
+                              {getMemberName(reply.member) || "Member"}
+                            </p>
+
+                            <p className="mt-1 break-words text-sm text-slate-600">
+                              {reply.content}
+                            </p>
+
+                          </div>
+                        ))}
+
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })}
 
               {comments.length === 0 && (
                 <p className="text-sm text-slate-400">
                   No comments yet. Start the conversation!
                 </p>
               )}
+
             </div>
 
             {/* ADD COMMENT */}
@@ -454,12 +550,19 @@ function PostCard({
                 <Send size={18} />
               </button>
             </form>
+
           </div>
         )}
+
       </div>
     </article>
   );
 }
+
+
+// ========================================
+// MY FORUM PAGE
+// ========================================
 
 export default function MyForum() {
   const [member, setMember] = useState(null);
@@ -471,6 +574,7 @@ export default function MyForum() {
 
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
+
   const [removingPost, setRemovingPost] = useState(null);
   const [savingPost, setSavingPost] = useState(null);
   const [sharingPost, setSharingPost] = useState(null);
@@ -484,7 +588,10 @@ export default function MyForum() {
 
   const isLoggedIn = Boolean(getToken());
 
-  // UPDATE A POST IN BOTH MY POSTS AND SHARED POSTS
+  // ========================================
+  // UPDATE POST IN BOTH LISTS
+  // ========================================
+
   function updatePostInLists(postId, updates) {
     const updateList = (list) =>
       list.map((item) => {
@@ -514,6 +621,28 @@ export default function MyForum() {
     setSharedPosts(updateList);
   }
 
+  // ========================================
+  // GET CURRENT POST
+  // ========================================
+
+  function getCurrentPost(postId) {
+    const allPosts = [...myPosts, ...sharedPosts];
+
+    for (const item of allPosts) {
+      const originalPost = item.post || item;
+
+      if (originalPost.id === postId) {
+        return originalPost;
+      }
+    }
+
+    return null;
+  }
+
+  // ========================================
+  // LOAD MY FORUM
+  // ========================================
+
   async function loadMyForum() {
     if (!getToken()) {
       setNotice("Please log in to view your personal forum.");
@@ -535,16 +664,30 @@ export default function MyForum() {
         apiRequest(`${API_BASE}/community/shared-posts`),
       ]);
 
-      setMember(profileResponse.member || null);
+      const profileMember =
+        profileResponse.member ||
+        profileResponse.data?.member ||
+        profileResponse.data ||
+        null;
 
-      setMyPosts(getPosts(myPostsResponse));
+      setMember(profileMember);
 
+      // MY POSTS
+      setMyPosts(
+        getPosts(myPostsResponse).filter(
+          (post) => post.status === "approved"
+        )
+      );
+
+      // SHARED POSTS
+      // The backend now returns the original post directly.
       setSharedPosts(
         getPosts(sharedPostsResponse).map((item) => ({
           ...item,
           post: item.post || undefined,
         }))
       );
+
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -556,7 +699,10 @@ export default function MyForum() {
     loadMyForum();
   }, []);
 
+  // ========================================
   // REMOVE SHARED POST
+  // ========================================
+
   async function removeShare(postId) {
     const confirmed = window.confirm(
       "Remove this shared post from your profile?"
@@ -590,6 +736,7 @@ export default function MyForum() {
       setNotice(
         data.message || "Shared post removed from your profile."
       );
+
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -597,7 +744,10 @@ export default function MyForum() {
     }
   }
 
+  // ========================================
   // LIKE OR UNLIKE
+  // ========================================
+
   async function toggleLike(postId) {
     try {
       const data = await apiRequest(
@@ -611,12 +761,16 @@ export default function MyForum() {
         is_liked: data.is_liked,
         likes_count: data.likes_count,
       });
+
     } catch (error) {
       setNotice(error.message);
     }
   }
 
+  // ========================================
   // SAVE OR UNSAVE
+  // ========================================
+
   async function toggleSave(postId) {
     try {
       setSavingPost(postId);
@@ -633,6 +787,7 @@ export default function MyForum() {
       });
 
       setNotice(data.message || "");
+
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -640,7 +795,10 @@ export default function MyForum() {
     }
   }
 
+  // ========================================
   // SHARE POST
+  // ========================================
+
   async function sharePost(postId) {
     try {
       setSharingPost(postId);
@@ -658,6 +816,7 @@ export default function MyForum() {
       });
 
       setNotice(data.message || "Post shared successfully.");
+
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -665,7 +824,10 @@ export default function MyForum() {
     }
   }
 
+  // ========================================
   // LOAD COMMENTS AND REPLIES
+  // ========================================
+
   async function toggleComments(postId) {
     const isOpen = activeComments.includes(postId);
 
@@ -673,6 +835,7 @@ export default function MyForum() {
       setActiveComments((previous) =>
         previous.filter((id) => id !== postId)
       );
+
       return;
     }
 
@@ -689,12 +852,16 @@ export default function MyForum() {
         ...previous,
         [postId]: data.comments || [],
       }));
+
     } catch (error) {
       setNotice(error.message);
     }
   }
 
+  // ========================================
   // ADD COMMENT OR REPLY
+  // ========================================
+
   async function addComment(postId, parentCommentId = null) {
     const text = parentCommentId
       ? replyInputs[parentCommentId] || ""
@@ -749,10 +916,12 @@ export default function MyForum() {
         };
       });
 
-      // BOTH COMMENTS AND REPLIES INCREASE THE TOTAL COUNT
+      // UPDATE COMMENT COUNT INCLUDING REPLIES
+      const currentCount =
+        getCurrentPost(postId)?.comments_count || 0;
+
       updatePostInLists(postId, {
-        comments_count:
-          (getCurrentPost(postId)?.comments_count || 0) + 1,
+        comments_count: currentCount + 1,
       });
 
       if (parentCommentId) {
@@ -768,30 +937,27 @@ export default function MyForum() {
           [postId]: "",
         }));
       }
+
     } catch (error) {
       setNotice(error.message);
     }
   }
 
-  // GET CURRENT POST COUNT
-  function getCurrentPost(postId) {
-    const allPosts = [...myPosts, ...sharedPosts];
-
-    for (const item of allPosts) {
-      const originalPost = item.post || item;
-
-      if (originalPost.id === postId) {
-        return originalPost;
-      }
-    }
-
-    return null;
-  }
+  // ========================================
+  // DISPLAYED POSTS
+  // ========================================
 
   const displayedPosts =
     activeTab === "my-posts" ? myPosts : sharedPosts;
 
-  const memberName = member?.name || "Kindora Member";
+  const memberName =
+    member?.full_name ||
+    member?.name ||
+    "Kindora Member";
+
+  // ========================================
+  // NOT LOGGED IN
+  // ========================================
 
   if (!isLoggedIn) {
     return (
@@ -799,8 +965,13 @@ export default function MyForum() {
         <Header />
 
         <main className="min-h-screen bg-[#F7FAFD] px-5 py-20">
+
           <div className="mx-auto max-w-lg rounded-2xl border border-slate-100 bg-white p-8 text-center shadow-sm">
-            <Users size={42} className="mx-auto text-[#8EC5E9]" />
+
+            <Users
+              size={42}
+              className="mx-auto text-[#8EC5E9]"
+            />
 
             <h1 className="mt-4 text-2xl font-extrabold text-[#24364B]">
               Log In to View Your Forum
@@ -816,11 +987,16 @@ export default function MyForum() {
             >
               Log In
             </a>
+
           </div>
         </main>
       </>
     );
   }
+
+  // ========================================
+  // MAIN PAGE
+  // ========================================
 
   return (
     <>
@@ -830,7 +1006,9 @@ export default function MyForum() {
 
         {/* PROFILE HERO */}
         <section className="border-b border-[#DDF0FC] bg-[#EAF5FC] px-5 py-10 sm:py-14 lg:px-8">
+
           <div className="mx-auto max-w-5xl">
+
             <a
               href="/community"
               className="inline-flex items-center gap-2 text-sm font-semibold text-[#397EAD] transition hover:gap-3"
@@ -840,11 +1018,13 @@ export default function MyForum() {
             </a>
 
             <div className="mt-6 flex items-center gap-4">
+
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-xl font-extrabold text-[#438FC4] shadow-sm">
                 {getInitials(memberName)}
               </div>
 
               <div>
+
                 <h1 className="text-2xl font-extrabold text-[#24364B] sm:text-3xl">
                   {memberName}
                 </h1>
@@ -852,14 +1032,18 @@ export default function MyForum() {
                 <p className="mt-1 text-sm text-slate-500">
                   Your personal community forum
                 </p>
+
               </div>
             </div>
+
           </div>
         </section>
 
         {/* MY FORUM CONTENT */}
         <section className="mx-auto max-w-5xl px-5 py-10 lg:px-8">
+
           <div className="mb-7">
+
             <p className="text-sm font-bold text-[#69ACD9]">
               MY FORUM
             </p>
@@ -871,6 +1055,7 @@ export default function MyForum() {
             <p className="mt-2 text-sm leading-6 text-slate-500">
               Keep track of the experiences you share and the stories you enjoy.
             </p>
+
           </div>
 
           {/* NOTICE */}
@@ -879,21 +1064,26 @@ export default function MyForum() {
               aria-live="polite"
               className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-[#DDF0FC] bg-white p-4 text-sm leading-6 text-[#397EAD]"
             >
+
               <p>{notice}</p>
 
               <button
+                type="button"
                 onClick={() => setNotice("")}
                 aria-label="Close notice"
                 className="shrink-0 text-slate-400 hover:text-slate-600"
               >
                 ×
               </button>
+
             </div>
           )}
 
           {/* TABS */}
           <div className="mb-7 flex gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
+
             <button
+              type="button"
               onClick={() => setActiveTab("my-posts")}
               className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition ${
                 activeTab === "my-posts"
@@ -910,6 +1100,7 @@ export default function MyForum() {
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab("shared-posts")}
               className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition ${
                 activeTab === "shared-posts"
@@ -924,11 +1115,13 @@ export default function MyForum() {
                 {sharedPosts.length}
               </span>
             </button>
+
           </div>
 
           {/* LOADING */}
           {loading && (
             <div className="rounded-2xl border border-slate-100 bg-white p-12 text-center shadow-sm">
+
               <LoaderCircle
                 size={30}
                 className="mx-auto animate-spin text-[#69ACD9]"
@@ -937,18 +1130,22 @@ export default function MyForum() {
               <p className="mt-4 text-sm text-slate-500">
                 Loading your forum...
               </p>
+
             </div>
           )}
 
           {/* EMPTY STATE */}
           {!loading && displayedPosts.length === 0 && (
             <div className="rounded-2xl border border-slate-100 bg-white px-6 py-14 text-center shadow-sm">
+
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF5FC] text-[#69ACD9]">
+
                 {activeTab === "my-posts" ? (
                   <ImageIcon size={29} />
                 ) : (
                   <Share2 size={29} />
                 )}
+
               </div>
 
               <h3 className="mt-5 text-lg font-bold text-[#24364B]">
@@ -970,12 +1167,14 @@ export default function MyForum() {
                 Visit Community Forum
                 <ArrowLeft size={16} className="rotate-180" />
               </a>
+
             </div>
           )}
 
           {/* POST FEED */}
           {!loading && displayedPosts.length > 0 && (
             <div className="space-y-6">
+
               {displayedPosts.map((item) => {
                 const post = item.post || item;
                 const postId = post.id;
@@ -1019,11 +1218,13 @@ export default function MyForum() {
                   />
                 );
               })}
+
             </div>
           )}
 
           {/* BOTTOM LINK */}
           <div className="mt-10 text-center">
+
             <a
               href="/community"
               className="inline-flex items-center gap-2 text-sm font-bold text-[#438FC4] transition hover:gap-3"
@@ -1031,13 +1232,17 @@ export default function MyForum() {
               <ArrowLeft size={16} />
               Return to Community Forum
             </a>
+
           </div>
+
         </section>
       </main>
 
       {/* FOOTER */}
       <footer className="border-t border-slate-100 bg-white px-5 py-8">
+
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 sm:flex-row">
+
           <span className="text-lg font-extrabold text-[#24364B]">
             Kindora<span className="text-[#69ACD9]">.</span>
           </span>
@@ -1047,8 +1252,9 @@ export default function MyForum() {
           </p>
 
           <p className="text-sm text-slate-400">
-            © 2026 Kindora. Demo project.
+            © 2026 Kindora.
           </p>
+
         </div>
       </footer>
     </>

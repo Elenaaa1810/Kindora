@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Campaign;
+use App\Models\Member;
+use App\Models\Attendance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -26,6 +28,36 @@ class CampaignController extends Controller
             }
         }
     }
+    // Get homepage statistics
+public function stats()
+{
+    // Update expired campaigns first
+    $this->updateExpiredCampaigns();
+
+    // Count active volunteers
+    $activeVolunteers = Member::whereRaw(
+        'LOWER(status) = ?',
+        ['active']
+    )->count();
+
+    // Count completed campaigns
+    $completedCampaigns = Campaign::whereRaw(
+        'LOWER(status) = ?',
+        ['completed']
+    )->count();
+
+    // Count attendance records marked as present
+    $volunteerAttendances = Attendance::whereRaw(
+        'LOWER(status) = ?',
+        ['present']
+    )->count();
+
+    return response()->json([
+        'active_volunteers' => $activeVolunteers,
+        'completed_campaigns' => $completedCampaigns,
+        'volunteer_attendances' => $volunteerAttendances,
+    ]);
+}
 
     // Get all campaigns
     public function index()

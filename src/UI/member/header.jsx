@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
@@ -11,6 +12,7 @@ import {
 function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const location = useLocation();
 
@@ -22,10 +24,70 @@ function Header() {
         sessionStorage.getItem("memberToken");
 
       setIsLoggedIn(!!token);
+
+      if (!token) {
+        setUnreadCount(0);
+      }
     };
 
     checkLogin();
-  }, [location]);
+  }, [location.pathname]);
+
+  // Fetch unread notification count
+  useEffect(() => {
+    const token =
+      localStorage.getItem("memberToken") ||
+      sessionStorage.getItem("memberToken");
+
+    if (!token) {
+      setUnreadCount(0);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchUnreadCount = async () => {
+      // Hide notification dot when viewing Notifications page
+      if (location.pathname === "/notifications") {
+        setUnreadCount(0);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          "http://127.0.0.1:8000/api/member/notifications",
+          {
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch notifications");
+        }
+
+        const result = await response.json();
+
+        if (isMounted) {
+          setUnreadCount(Number(result.unread_count) || 0);
+        }
+      } catch (error) {
+        console.error("Error fetching unread notifications:", error);
+      }
+    };
+
+    fetchUnreadCount();
+
+    // Check for new notifications every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [location.pathname]);
 
   const navLinkStyle = ({ isActive }) =>
     `transition-colors duration-200 ${
@@ -70,16 +132,19 @@ function Header() {
 
         {/* Desktop Authentication */}
         <div className="hidden items-center gap-5 md:flex">
-
           {isLoggedIn ? (
             <>
               {/* Notifications */}
               <Link
                 to="/notifications"
                 className="relative rounded-xl p-2 text-slate-600 transition hover:bg-[#EAF5FC] hover:text-[#438FC4]"
-                aria-label="Notifications"
+                aria-label={`Notifications, ${unreadCount} unread`}
               >
                 <Bell size={23} />
+
+                {unreadCount > 0 && (
+                  <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500"></span>
+                )}
               </Link>
 
               {/* User Profile */}
@@ -152,18 +217,26 @@ function Header() {
           ))}
 
           <div className="border-t border-slate-100 pt-3">
-
             {isLoggedIn ? (
               <>
+                {/* Mobile Notifications */}
                 <NavLink
                   to="/notifications"
                   onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-3 rounded-lg px-3 py-3 font-medium text-slate-600 hover:bg-[#EAF5FC] hover:text-[#438FC4]"
                 >
-                  <Bell size={20} />
+                  <span className="relative">
+                    <Bell size={20} />
+
+                    {unreadCount > 0 && (
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500"></span>
+                    )}
+                  </span>
+
                   Notifications
                 </NavLink>
 
+                {/* Mobile Profile */}
                 <NavLink
                   to="/userprofile"
                   onClick={() => setMenuOpen(false)}
@@ -192,7 +265,6 @@ function Header() {
                 </NavLink>
               </>
             )}
-
           </div>
         </div>
       )}

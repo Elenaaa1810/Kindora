@@ -30,7 +30,6 @@ class CommunityController extends Controller
             ->paginate(10);
 
         $posts->getCollection()->transform(function ($post) use ($member) {
-
             return [
                 'id' => $post->id,
                 'description' => $post->description,
@@ -47,8 +46,11 @@ class CommunityController extends Controller
 
                 'member' => [
                     'id' => $post->member?->id,
-                    'name' => $post->member?->name
-                        ?? $post->member?->full_name
+                    'name' => $post->member?->full_name
+                        ?? $post->member?->name
+                        ?? 'Member',
+                    'full_name' => $post->member?->full_name
+                        ?? $post->member?->name
                         ?? 'Member',
                 ],
 
@@ -137,53 +139,62 @@ class CommunityController extends Controller
     }
 
 
-    // ========================================
-    // ADMIN: GET COMMUNITY POSTS
-    // ========================================
 
-    public function adminPosts(Request $request)
-    {
-        $validated = $request->validate([
-            'status' => 'nullable|in:pending,approved,rejected',
-        ]);
+// ========================================
+// ADMIN: GET COMMUNITY POSTS
+// ========================================
 
-        $status = $validated['status'] ?? 'pending';
+public function adminPosts(Request $request)
+{
+    $validated = $request->validate([
+        'status' => 'nullable|in:pending,approved,rejected,all',
+    ]);
 
-        $posts = CommunityPost::with('member')
-            ->withCount(['likes', 'comments'])
-            ->where('status', $status)
-            ->latest()
-            ->paginate(10);
+    $status = $validated['status'] ?? 'pending';
 
-        $posts->getCollection()->transform(function ($post) {
-            return [
-                'id' => $post->id,
-                'description' => $post->description,
-                'activity' => $post->activity,
-                'media_path' => $post->media_path,
+    $query = CommunityPost::with('member')
+        ->withCount(['likes', 'comments']);
 
-                'media_url' => $post->media_path
-                    ? Storage::disk('public')->url($post->media_path)
-                    : null,
-
-                'media_type' => $post->media_type,
-                'status' => $post->status,
-                'created_at' => $post->created_at,
-
-                'member' => [
-                    'id' => $post->member?->id,
-                    'name' => $post->member?->name
-                        ?? $post->member?->full_name
-                        ?? 'Member',
-                ],
-
-                'likes_count' => $post->likes_count,
-                'comments_count' => $post->comments_count,
-            ];
-        });
-
-        return response()->json($posts);
+    // Filter only when a specific status is requested.
+    // "all" returns pending, approved and rejected posts.
+    if ($status !== 'all') {
+        $query->where('status', $status);
     }
+
+    $posts = $query->latest()->paginate(100);
+
+    $posts->getCollection()->transform(function ($post) {
+        return [
+            'id' => $post->id,
+            'description' => $post->description,
+            'activity' => $post->activity,
+            'media_path' => $post->media_path,
+
+            'media_url' => $post->media_path
+                ? Storage::disk('public')->url($post->media_path)
+                : null,
+
+            'media_type' => $post->media_type,
+            'status' => $post->status,
+            'created_at' => $post->created_at,
+
+            'member' => [
+                'id' => $post->member?->id,
+                'name' => $post->member?->full_name
+                    ?? $post->member?->name
+                    ?? 'Member',
+                'full_name' => $post->member?->full_name
+                    ?? $post->member?->name
+                    ?? 'Member',
+            ],
+
+            'likes_count' => $post->likes_count,
+            'comments_count' => $post->comments_count,
+        ];
+    });
+
+    return response()->json($posts);
+}
 
 
     // ========================================
@@ -196,30 +207,40 @@ class CommunityController extends Controller
             'status' => 'required|in:approved,rejected',
         ]);
 
-        $post = CommunityPost::findOrFail($postId);
+        $post = CommunityPost::with('member')->findOrFail($postId);
 
         $previousStatus = $post->status;
+        $newStatus = $validated['status'];
 
         $post->update([
-            'status' => $validated['status'],
+            'status' => $newStatus,
         ]);
 
-        // Notify the post owner when the post becomes approved.
-        if (
-            $validated['status'] === 'approved' &&
-            $previousStatus !== 'approved'
-        ) {
-            $post->member->notify(new MemberNotification([
-                'type' => 'post_approved',
-                'title' => 'Post Approved!',
-                'message' => 'Your community post has been approved by the admin.',
-                'post_id' => $post->id,
-                'url' => '/community'
-            ]));
+        if ($previousStatus !== $newStatus && $post->member) {
+
+            if ($newStatus === 'approved') {
+                $notification = [
+                    'type' => 'post_approved',
+                    'title' => 'Post Approved!',
+                    'message' => 'Your community post has been approved by the admin.',
+                    'post_id' => $post->id,
+                    'url' => '/myforum',
+                ];
+            } else {
+                $notification = [
+                    'type' => 'post_rejected',
+                    'title' => 'Post Rejected',
+                    'message' => 'Unfortunately, your community post has been rejected by the admin.',
+                    'post_id' => $post->id,
+                    'url' => '/myforum',
+                ];
+            }
+
+            $post->member->notify(new MemberNotification($notification));
         }
 
         return response()->json([
-            'message' => $validated['status'] === 'approved'
+            'message' => $newStatus === 'approved'
                 ? 'Post approved successfully.'
                 : 'Post rejected successfully.',
 
@@ -247,16 +268,11 @@ class CommunityController extends Controller
             ->first();
 
         if ($like) {
-
-            // Remove existing like.
             $like->delete();
 
             $liked = false;
             $message = 'Like removed.';
-
         } else {
-
-            // Save the new like to the database.
             CommunityPostLike::create([
                 'post_id' => $post->id,
                 'member_id' => $member->id,
@@ -265,9 +281,7 @@ class CommunityController extends Controller
             $liked = true;
             $message = 'Post liked successfully.';
 
-            // Notify the post owner only when another member likes the post.
-            if ($post->member_id != $member->id) {
-
+            if ($post->member_id != $member->id && $post->member) {
                 $post->member->notify(new MemberNotification([
                     'type' => 'post_liked',
                     'title' => 'New Like',
@@ -306,6 +320,7 @@ class CommunityController extends Controller
 
         if ($save) {
             $save->delete();
+
             $saved = false;
             $message = 'Post removed from saved posts.';
         } else {
@@ -362,19 +377,13 @@ class CommunityController extends Controller
             'content' => $validated['content'],
         ]);
 
-        // Notify the relevant member.
         if ($parentId) {
-
-            // Reply: notify the original commenter.
             $recipientId = $parent->member_id;
             $type = 'comment_reply';
             $title = 'New Reply';
             $message = ($member->full_name ?? 'A member')
                 . ' replied to your comment.';
-
         } else {
-
-            // New comment: notify the post owner.
             $recipientId = $post->member_id;
             $type = 'post_commented';
             $title = 'New Comment';
@@ -382,9 +391,7 @@ class CommunityController extends Controller
                 . ' commented on your post.';
         }
 
-        // Avoid notifying yourself.
         if ($recipientId != $member->id) {
-
             $recipient = \App\Models\Member::find($recipientId);
 
             if ($recipient) {
@@ -414,9 +421,12 @@ class CommunityController extends Controller
                 'parent_comment_id' => $comment->parent_comment_id,
 
                 'member' => [
-                    'id' => $comment->member->id,
-                    'name' => $comment->member->name
-                        ?? $comment->member->full_name
+                    'id' => $comment->member?->id,
+                    'name' => $comment->member?->full_name
+                        ?? $comment->member?->name
+                        ?? 'Member',
+                    'full_name' => $comment->member?->full_name
+                        ?? $comment->member?->name
                         ?? 'Member',
                 ],
 
@@ -445,8 +455,11 @@ class CommunityController extends Controller
             $formatMember = function ($member) {
                 return [
                     'id' => $member?->id,
-                    'name' => $member?->name
-                        ?? $member?->full_name
+                    'name' => $member?->full_name
+                        ?? $member?->name
+                        ?? 'Member',
+                    'full_name' => $member?->full_name
+                        ?? $member?->name
                         ?? 'Member',
                 ];
             };
@@ -571,8 +584,11 @@ class CommunityController extends Controller
 
                 'member' => [
                     'id' => $post->member?->id,
-                    'name' => $post->member?->name
-                        ?? $post->member?->full_name
+                    'name' => $post->member?->full_name
+                        ?? $post->member?->name
+                        ?? 'Member',
+                    'full_name' => $post->member?->full_name
+                        ?? $post->member?->name
                         ?? 'Member',
                 ],
 
@@ -607,7 +623,8 @@ class CommunityController extends Controller
             ], 403);
         }
 
-        $post = CommunityPost::where('status', 'approved')
+        $post = CommunityPost::with('member')
+            ->where('status', 'approved')
             ->findOrFail($postId);
 
         $share = CommunityPostShare::firstOrCreate([
@@ -615,10 +632,10 @@ class CommunityController extends Controller
             'member_id' => $member->id,
         ]);
 
-        // Notify the original post owner only for a new share.
         if (
             $share->wasRecentlyCreated &&
-            $post->member_id != $member->id
+            $post->member_id != $member->id &&
+            $post->member
         ) {
             $post->member->notify(new MemberNotification([
                 'type' => 'post_shared',
@@ -689,25 +706,52 @@ class CommunityController extends Controller
             ->paginate(5);
 
         $posts->getCollection()->transform(function ($post) use ($member) {
-            $post->media_url = $post->media_path
-                ? Storage::disk('public')->url($post->media_path)
-                : null;
 
-            $post->is_liked = $post->likes()
-                ->where('member_id', $member->id)
-                ->exists();
-
-            $post->is_saved = $post->saves()
-                ->where('member_id', $member->id)
-                ->exists();
-
-            $post->is_shared = true;
-
-            $post->shared_at = CommunityPostShare::where('post_id', $post->id)
+            $sharedAt = CommunityPostShare::where('post_id', $post->id)
                 ->where('member_id', $member->id)
                 ->value('created_at');
 
-            return $post;
+            return [
+                'id' => $post->id,
+                'description' => $post->description,
+                'activity' => $post->activity,
+                'media_path' => $post->media_path,
+
+                'media_url' => $post->media_path
+                    ? Storage::disk('public')->url($post->media_path)
+                    : null,
+
+                'media_type' => $post->media_type,
+                'status' => $post->status,
+                'created_at' => $post->created_at,
+
+                // This is the ORIGINAL post owner's information.
+                'member' => [
+                    'id' => $post->member?->id,
+                    'name' => $post->member?->full_name
+                        ?? $post->member?->name
+                        ?? 'Member',
+                    'full_name' => $post->member?->full_name
+                        ?? $post->member?->name
+                        ?? 'Member',
+                ],
+
+                'likes_count' => $post->likes_count,
+                'comments_count' => $post->comments_count,
+                'shares_count' => $post->shares_count,
+
+                'is_liked' => $post->likes()
+                    ->where('member_id', $member->id)
+                    ->exists(),
+
+                'is_saved' => $post->saves()
+                    ->where('member_id', $member->id)
+                    ->exists(),
+
+                'is_shared' => true,
+
+                'shared_at' => $sharedAt,
+            ];
         });
 
         return response()->json($posts);

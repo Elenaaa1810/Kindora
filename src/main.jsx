@@ -21,6 +21,7 @@ import AttendanceManagement from "./UI/admin/AttendanceManagement.jsx";
 import ManageUsers from "./UI/admin/ManageUsers.jsx";
 import AdminApprovals from "./UI/admin/AdminApprovals.jsx";
 import CommunityPostManagement from "./UI/admin/CommunityPostManagement.jsx";
+import AdminNotifications from "./UI/admin/AdminNotifications.jsx";
 
 import "./index.css";
 
@@ -52,7 +53,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                         <Route path="users" element={<ManageUsers />} />
                         <Route path="approvals" element={<AdminApprovals />} />
                         <Route path="community-posts" element={<CommunityPostManagement />} />
-                    </Route>
+                        <Route path="notifications" element={<AdminNotifications />}/></Route>
                 </Route>
 
             </Routes>

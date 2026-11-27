@@ -965,7 +965,7 @@ function UserProfile() {
           </p>
 
           <p className="text-sm text-slate-400">
-            © 2026 Kindora. Demo project.
+            © 2026 Kindora.
           </p>
         </div>
       </footer>

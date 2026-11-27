@@ -13,43 +13,91 @@ use App\Mail\MemberApplicationStatusMail;
 class MemberController extends Controller
 {
     // REGISTER A NEW VOLUNTEER
-    public function register(Request $request)
-    {
-        $validated = $request->validate([
-            'full_name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:members,email',
-            'password' => 'required|string|min:8|confirmed',
-            'phone' => 'nullable|string|max:30',
-            'location' => 'nullable|string|max:255',
-            'reason' => 'required|string',
-            'motivation' => 'required|string',
-            'interests' => 'required|array|min:1',
-            'interests.*' => 'string',
-            'previous_experience' => 'required|boolean',
-            'experience_details' => 'nullable|string',
-            'availability' => 'required|string|max:255',
-        ]);
+    
+// REGISTER A NEW VOLUNTEER OR REAPPLY AFTER REJECTION
+public function register(Request $request)
+{
+    $validated = $request->validate([
+        'full_name' => 'required|string|max:255',
+        'email' => 'required|email|max:255',
+        'password' => 'required|string|min:8|confirmed',
+        'phone' => 'nullable|string|max:30',
+        'location' => 'nullable|string|max:255',
+        'reason' => 'required|string',
+        'motivation' => 'required|string',
+        'interests' => 'required|array|min:1',
+        'interests.*' => 'string',
+        'previous_experience' => 'required|boolean',
+        'experience_details' => 'nullable|string',
+        'availability' => 'required|string|max:255',
+    ]);
 
-        $member = Member::create([
-            'full_name' => $validated['full_name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'phone' => $validated['phone'] ?? null,
-            'location' => $validated['location'] ?? null,
-            'reason' => $validated['reason'],
-            'motivation' => $validated['motivation'],
-            'interests' => $validated['interests'],
-            'previous_experience' => $validated['previous_experience'],
-            'experience_details' => $validated['experience_details'] ?? null,
-            'availability' => $validated['availability'],
-            'status' => 'pending',
-        ]);
+    // Check whether this email already belongs to a member
+    $existingMember = Member::where('email', $validated['email'])->first();
 
+    // Prevent duplicate applications from active members
+    if ($existingMember && $existingMember->status === 'Active') {
         return response()->json([
-            'message' => 'Your application has been submitted successfully!',
-            'member' => $member,
-        ], 201);
+            'message' => 'This email is already registered. Please log in.',
+        ], 422);
     }
+
+    // Prevent another application while the current one is pending
+    if ($existingMember && $existingMember->status === 'pending') {
+        return response()->json([
+            'message' => 'Your application is already pending admin approval.',
+        ], 422);
+    }
+
+    // Prevent suspended members from reapplying
+    if ($existingMember && $existingMember->status === 'Suspended') {
+        return response()->json([
+            'message' => 'This account has been suspended. Please contact Kindora for assistance.',
+        ], 403);
+    }
+
+    $memberData = [
+        'full_name' => $validated['full_name'],
+        'email' => $validated['email'],
+        'password' => Hash::make($validated['password']),
+        'phone' => $validated['phone'] ?? null,
+        'location' => $validated['location'] ?? null,
+        'reason' => $validated['reason'],
+        'motivation' => $validated['motivation'],
+        'interests' => $validated['interests'],
+        'previous_experience' => $validated['previous_experience'],
+        'experience_details' => $validated['experience_details'] ?? null,
+        'availability' => $validated['availability'],
+        'status' => 'pending',
+        'rejection_reason' => null,
+    ];
+
+    if ($existingMember && $existingMember->status === 'rejected') {
+
+        // Update the existing rejected member's application
+        $existingMember->update($memberData);
+
+        // Remove old authentication tokens for security
+        $existingMember->tokens()->delete();
+
+        $member = $existingMember->fresh();
+
+        $message = 'Your new application has been submitted successfully! Please wait for admin approval.';
+
+    } else {
+
+        // Create a completely new member
+        $member = Member::create($memberData);
+
+        $message = 'Your application has been submitted successfully! Please wait for admin approval.';
+    }
+
+    return response()->json([
+        'message' => $message,
+        'member' => $member,
+    ], 201);
+}
+
 
 
     // GET ALL MEMBER APPLICATIONS
